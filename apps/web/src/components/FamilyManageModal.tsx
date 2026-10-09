@@ -172,27 +172,29 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
           </div>
 
           {/* Seção: Convidar Responsável */}
-          <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-200 space-y-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-indigo-800">
+          {/* Seção: Convidar Responsável */}
+          <div className="bg-sky-50/80 p-4 rounded-2xl border border-sky-200/90 space-y-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-sky-800">
               Convidar Responsável
             </label>
-            <p className="text-xs text-indigo-700 mb-2">
+            <p className="text-xs text-sky-700 mb-2">
               Compartilhe o link abaixo para outro adulto acessar e gerenciar a família.
             </p>
             <div className="flex gap-2">
               <input
                 type="text"
                 readOnly
-                value={`http://localhost:5173/?join_family=${family.id}`}
-                className="flex-1 text-xs font-mono px-3 py-2 bg-white rounded-xl border border-indigo-200 text-indigo-900 focus:outline-none"
+                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?join_family=${family.id}`}
+                className="flex-1 text-xs font-mono px-3 py-2 bg-white rounded-xl border border-sky-200 text-sky-950 focus:outline-none select-all"
               />
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(`http://localhost:5173/?join_family=${family.id}`);
-                  alert('Link copiado!');
+                  const inviteUrl = `${window.location.origin}/?join_family=${family.id}`;
+                  navigator.clipboard.writeText(inviteUrl);
+                  alert('Link de convite copiado com sucesso!');
                 }}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition-all shadow-xs shrink-0"
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
               >
                 Copiar Link
               </button>
