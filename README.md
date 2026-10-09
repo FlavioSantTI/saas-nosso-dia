@@ -3,15 +3,21 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
+![Versão](https://img.shields.io/badge/Versão-v1.0.3-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-amber?style=for-the-badge)
 
 <p align="center">
   <strong>Um sistema inteligente e acolhedor para famílias com filhos e rotinas dinâmicas.</strong><br>
   Visibilidade total sobre o que fazer, quando, onde e quem é o adulto responsável por viabilizar.
+</p>
+
+<p align="center">
+  🌐 <strong>Produção:</strong> <a href="https://nossodia.flaviosantiago.com.br/">nossodia.flaviosantiago.com.br</a>
 </p>
 
 </div>
@@ -38,6 +44,7 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
 ### 👨‍👩‍👧‍👦 2. Gestão Familiar & Membros Multi-Tenant
 - **Cores Distintivas por Membro:** Cada participante possui sua cor de identificação rápida (ex.: Flávio em Azul Oceano, Silvia em Terracota, Rafael em Verde Sálvia).
 - **Filtro Rápido por Pessoa:** Filtre a grade com 1 clique para ver a agenda de um filho ou de toda a família.
+- **Convite Dinâmico:** Link de convite gerado dinamicamente para o domínio atual (`window.location.origin`), pronto para WhatsApp.
 - **Perfis Gerenciados vs Adultos:** Dependentes/crianças não necessitam de login; adultos possuem gestão de permissões.
 
 ### 🔄 3. Rotinas Recorrentes & Exclusão Seletiva
@@ -74,6 +81,7 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
 | :--- | :--- |
 | **Frontend** | React 18, TypeScript (strict mode), Vite 5, Tailwind CSS |
 | **Ícones & UI** | Lucide React, Plus Jakarta Sans |
+| **Container & Proxy** | Docker (Multi-stage Node 20 + Nginx Alpine), Docker Compose |
 | **Backend & Auth** | Supabase (PostgreSQL 15, Auth JWT, Row Level Security) |
 | **PWA & Offline** | Service Worker, Web App Manifest |
 
@@ -85,6 +93,7 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
 saas-nosso-dia/
 ├── apps/
 │   └── web/                         # Aplicação Frontend React + Vite
+│       ├── nginx.conf               # Configuração do Nginx para SPA
 │       ├── index.html               # Entrypoint HTML com Plus Jakarta Sans
 │       ├── package.json             # Dependências e scripts do web
 │       ├── src/
@@ -116,7 +125,10 @@ saas-nosso-dia/
 ├── supabase/
 │   ├── migrations/                  # Scripts SQL de schema e políticas RLS
 │   └── tests/                       # Testes de penetração de segurança SQL
-└── README.md
+├── Dockerfile                       # Multi-stage build para produção
+├── docker-compose.yml               # Execução local orquestrada
+├── .dockerignore                    # Otimização de contexto Docker
+└── README.md                        # Documentação do projeto
 ```
 
 ---
@@ -124,13 +136,12 @@ saas-nosso-dia/
 ## 🚀 Como Executar Localmente
 
 ### Pré-requisitos
-- **Node.js** (versão 18 ou superior)
-- **npm** ou **pnpm**
+- **Node.js** (versão 18 ou superior) ou **Docker**
 - Projeto no [Supabase](https://supabase.com/) configurado
 
 ### 1. Clonar o Repositório
 ```bash
-git clone https://github.com/flaviosantti/saas-nosso-dia.git
+git clone https://github.com/FlavioSantTI/saas-nosso-dia.git
 cd saas-nosso-dia
 ```
 
@@ -141,17 +152,24 @@ VITE_SUPABASE_URL=https://seu-projeto.supabase.co
 VITE_SUPABASE_ANON_KEY=sua-chave-anon-publica
 ```
 
-### 3. Instalar Dependências e Executar
+### 3. Execução em Modo Desenvolvimento (Node.js)
 ```bash
 cd apps/web
 npm install
 npm run dev
 ```
-Acesse a aplicação no navegador em: `http://localhost:5173`
+Acesse no navegador: `http://localhost:5173`
 
-### 4. Validação de Tipos (TypeScript)
-Para checar a integridade do código sem compilar:
+### 4. Execução com Docker (Produção Local)
 ```bash
+# Na raiz do projeto:
+docker compose up -d --build
+```
+Acesse no navegador: `http://localhost:8080`
+
+### 5. Validação de Tipos (TypeScript)
+```bash
+cd apps/web
 npm run typecheck
 ```
 
@@ -163,6 +181,59 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 - Tabelas: `families`, `family_members`, `routines`, `events`, `locations`.
 - Chaves estrangeiras e índices de performance.
 - Regras de **Row Level Security (RLS)** para isolamento absoluto entre famílias.
+
+---
+
+## 📜 Controle de Versão (Changelog)
+
+Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.0.3] — 2026-10-09
+#### ✨ Adicionado
+- **Rodapé Global:** Adicionado rodapé fixo na aplicação com versão `v1.0.0` e assinatura *"Powered by Flavio Santiago Consultor IA — 2026"*.
+- **Controle de Versão no README:** Documentação detalhada de histórico e versionamento do ecossistema.
+
+#### 🐛 Corrigido
+- **Link de Convite Multi-Ambiente:** Substituído host fixo `localhost:5173` por `window.location.origin` no modal de Gestão Familiar, gerando links perfeitos para produção (`https://nossodia.flaviosantiago.com.br/`).
+
+---
+
+### [v1.0.2] — 2026-10-09
+#### 🐳 Infraestrutura & Containerização
+- **Dockerfile Multi-Stage:** Build otimizado com Node 20 Alpine e servidor final Nginx Alpine.
+- **Nginx SPA Configuration:** Regras de roteamento fallback para `index.html`, compressão Gzip e cache de assets.
+- **Docker Compose:** Orquestração automatizada para deploy e testes locais (`docker-compose.yml` e `.dockerignore`).
+
+---
+
+### [v1.0.1] — 2026-10-09
+#### 🎨 UI / UX Redesign (Modern Craft / Natureza & Equilíbrio)
+- **Tipografia:** Integração global da fonte *Plus Jakarta Sans*.
+- **Cabeçalho Glassmorphism:** Vidro fosco translúcido (`backdrop-blur-md`), cápsula de logo ND em azul suave e radar de status verde sálvia.
+- **Grade Semanal e Empty States:** Destaque do dia atual (*Hoje*) com borda céu suave e visual acolhedor com ícone `Sun` (*"Dia livre para relaxar! ☀️"*).
+- **Cards & Ícones:** Adoção de ícones do *Lucide React* (`Clock`, `MapPin`, `User`, `Bell`, `AlertTriangle`).
+- **Modais de Ação:** Diálogos com desfoque de fundo suave e cantos arredondados (`rounded-3xl`).
+- **Exclusão Seletiva Unificada:** Opções incondicionais no modal de exclusão com fallback automático por título e horário para registros legados.
+
+---
+
+### [v1.0.0] — 2026-10-07
+#### 🚀 Lançamento Inicial (MVP)
+- Core de cadastro de rotinas semanais recorrentes e eventos pontuais.
+- Multi-tenancy com isolamento hermético via Supabase Row Level Security (RLS).
+- Gestão de membros familiares com cores distintivas e perfis independentes.
+- Detecção básica de conflitos de horários por responsável.
+- Captura rápida com Inteligência Artificial para mensagens de texto e WhatsApp.
+- Suporte a notificações locais no navegador (Web Notifications API).
+
+---
+
+## 👤 Autor & Créditos
+
+Desenvolvido por **Flávio Santiago** — Consultor em Inteligência Artificial e Engenharia de Software.
+
+* **GitHub:** [@FlavioSantTI](https://github.com/FlavioSantTI)
+* **Plataforma:** [nossodia.flaviosantiago.com.br](https://nossodia.flaviosantiago.com.br/)
 
 ---
 
