@@ -1255,6 +1255,19 @@ export const App: React.FC = () => {
         )}
       </main>
 
+      {/* Rodapé Global */}
+      <footer className="mt-auto py-6 border-t border-sky-100/80 bg-white/40 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 font-medium">
+            <span className="font-bold text-slate-800">Nosso Dia</span>
+            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.0.0</span>
+          </p>
+          <p className="text-slate-400 text-xs">
+            Powered by <strong className="text-sky-700 font-semibold">Flavio Santiago Consultor IA</strong> — 2026
+          </p>
+        </div>
+      </footer>
+
       {/* Modal: Captura com IA */}
       <QuickAddWithAI
         isOpen={isQuickAddOpen}
