@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.3.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.4.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,37 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.4.0] — 2026-10-10
+#### ☀️ Briefing Matinal & Relatório Diário (`DailyBriefingCard.tsx`)
+- **Card Acolhedor de Abertura:** Saudação dinâmica baseada no turno (*"☀️ Bom dia / 🌤️ Boa tarde / 🌙 Boa noite, [Nome]!"*) com data por extenso e membro ativo.
+- **Relatório Operacional das Suas Missões:**
+  - Contagem clara de atividades sob sua responsabilidade direta no dia (`responsible_id`), com listagem cronológica contendo horário, participantes e local.
+  - Alerta comemorativo quando todas as tarefas estão livres (*"🎉 Nenhuma atividade sob sua responsabilidade hoje! Aproveite o dia livre"*).
+- **Próxima Saída em Destaque:** Indicador com contagem regressiva em minutos para a próxima saída ou compromisso nas próximas horas (*"⏱️ Próxima saída: em [X] minutos para [Local]"*).
+- **Visão Compartilhada do Cônjuge (Paz de Espírito):** Card complementar exibindo as atividades que o parceiro/cônjuge assumiu no dia.
+- **Controle Ergonômico:** Botão discreto para recolher/expandir o card, otimizando o espaço útil da tela.
+
+#### 🔔 Sistema de Feedback Visual (Toasts de Sucesso e Erro — `Toast.tsx`)
+- **Notificações Flutuantes (z-50):** Avisos animados no topo da tela com auto-dismiss em 3 segundos.
+- **Eventos Monitorados:**
+  - Criação de atividade (Manual ou IA): *"🎉 Atividade adicionada à rotina com sucesso!"*
+  - Edição salva: *"✓ Alterações salvas com sucesso!"*
+  - Exclusão de evento/série: *"🗑️ Atividade removida da semana."*
+  - Atribuição de responsável: *"👤 [Nome] definido como responsável!"*
+  - Link de convite copiado: *"🔗 Link de convite copiado para a área de transferência!"*
+  - Falhas gerais: *"⚠️ Não foi possível salvar. Tente novamente."*
+- **Bloqueio de Duplo Clique & Loading:** Botões de formulário exibem *"Salvando..."* e desabilitam durante requisições assíncronas.
+
+#### 📱 Responsividade Mobile no Header & Travamento de Scroll
+- **Header Otimizado para Smartphones (< 640px):**
+  - Logo "ND" compacto à esquerda com nome da família truncado sem estourar.
+  - Botões prioritários em destaque: `+ Nova` e `🤖 IA`.
+  - Menu suspenso de 3 pontinhos ('⋮') agrupando *Balanço da Semana*, *Meu Dia Hoje*, *Gerenciar Família* e *Entrar/Sair*.
+- **Prevenção de Scroll Lateral:** Adicionado `overflow-x-hidden` no `<html>`, `<body>` e container principal, travando o scroll horizontal no iPhone e Safari móvel.
+- **Rodapé Global:** Tag de versão atualizada para `v1.4.0`.
+
+---
 
 ### [v1.3.0] — 2026-10-10
 #### 🔐 Autenticação Real & Convite Familiar (Supabase Auth)
