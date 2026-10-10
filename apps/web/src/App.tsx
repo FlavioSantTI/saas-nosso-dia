@@ -884,7 +884,8 @@ export const App: React.FC = () => {
     type?: 'RECURRING' | 'SINGLE';
     startTime: string; // Ex: '18:00'
     duration: number; // Ex: 60 min
-    days?: string[]; // Ex: ['mon', 'wed'] ou ['Terça', 'Quinta']
+    days?: (string | number)[]; // Ex: ['mon', 'wed'], ['Terça', 'Quinta'] ou [1, 3]
+    date_str?: string | null;
     locationName?: string;
     responsible?: FamilyMember | null;
     participants?: FamilyMember[];
@@ -932,7 +933,9 @@ export const App: React.FC = () => {
       };
 
       const isRecurring = activity.type === 'RECURRING' || (activity.days && activity.days.length > 0 && activity.type !== 'SINGLE');
-      const routineDays = (activity.days || []).map(d => dayMap[d.toLowerCase()]).filter(d => d !== undefined);
+      const routineDays = (activity.days || [])
+        .map((d: any) => (typeof d === 'number' ? d : dayMap[String(d).toLowerCase().trim()]))
+        .filter((d: any): d is number => d !== undefined && d >= 0 && d <= 6);
 
       // 2. Grava a regra na tabela routines (se for recorrente)
       let routineId: string | null = null;
@@ -995,9 +998,11 @@ export const App: React.FC = () => {
       } else {
         // Evento único ou dias específicos apenas na semana atual
         const weekDateMap = getWeekDateMap(currentDate);
-        if (activity.days && activity.days.length > 0) {
-          activity.days.forEach((day) => {
-            const normalized = day.toLowerCase().trim();
+        if (activity.date_str) {
+          targetDates.push(activity.date_str);
+        } else if (activity.days && activity.days.length > 0) {
+          activity.days.forEach((day: any) => {
+            const normalized = typeof day === 'string' ? day.toLowerCase().trim() : '';
             const mappedDate = weekDateMap[normalized];
             if (mappedDate) {
               targetDates.push(mappedDate);
@@ -1086,14 +1091,16 @@ export const App: React.FC = () => {
   const handleConfirmQuickAdd = async (parsed: any) => {
     await saveActivityToSupabase({
       title: parsed.title,
-      type: (parsed.days && parsed.days.length > 0) ? 'RECURRING' : 'SINGLE',
-      startTime: parsed.time || '18:00',
+      type: parsed.type || (parsed.days && parsed.days.length > 0 ? 'RECURRING' : 'SINGLE'),
+      startTime: parsed.startTime || parsed.time || '18:00',
       duration: parsed.duration || 60,
       days: parsed.days || [],
-      locationName: parsed.location,
+      date_str: parsed.date_str || null,
+      locationName: parsed.locationName || parsed.location,
       responsible: parsed.responsible,
-      participants: parsed.participant ? [parsed.participant] : [],
-      reminder_minutes: 15,
+      participants: parsed.participants || (parsed.participant ? [parsed.participant] : []),
+      reminder_minutes: parsed.reminder_minutes !== undefined ? parsed.reminder_minutes : 15,
+      is_all_day: parsed.is_all_day || false,
       end_date: null
     });
     setIsQuickAddOpen(false);
