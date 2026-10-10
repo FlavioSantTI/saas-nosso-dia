@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.1.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.3.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,40 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.3.0] — 2026-10-10
+#### 🔐 Autenticação Real & Convite Familiar (Supabase Auth)
+- **Modal de Autenticação (`AuthModal.tsx`):**
+  - Abas intuitivas de **Entrar** e **Criar Conta** com validação de dados (E-mail, Senha e Nome).
+  - Integração nativa com `supabase.auth.signInWithPassword` e `supabase.auth.signUp`.
+- **Fluxo Inteligente de Convite Familiar:**
+  - Detecção dinâmica de parâmetro de convite na URL (`?invite=[family_id]`).
+  - Apresentação de banner caloroso: *"Você foi convidado(a) para participar da Família [Nome]!"*.
+  - Associação automática do `user_id` autenticado ao respectivo membro adulto em `family_members`.
+- **Gestão de Sessão & Perfil (`Header.tsx` e `App.tsx`):**
+  - Monitoramento em tempo real com `supabase.auth.onAuthStateChange`.
+  - Exibição de avatar e nome do usuário ativo (ex: `👤 Flávio`) com dropdown de perfil e botão de encerramento seguro de sessão (**"Sair (Logout)"**).
+  - Botão de acesso rápido **"Entrar"** quando deslogado.
+- **Links de Convite Seguros (`FamilyManageModal.tsx`):**
+  - Seção *"🔗 Convidar Cônjuge/Responsável"* com cópia de URL formatada diretamente a partir da origem: `${window.location.origin}/?invite=${family.id}`.
+
+#### 📊 Painel Duplo de Resumo (`SummaryModal.tsx`)
+- **☀️ Modo Operacional — "Meu Dia Hoje":**
+  - Identificação automática do membro logado (ou seletor de adultos responsáveis).
+  - Saudação personalizada contextual ao horário (*"☀️ Bom dia / Boa tarde / Boa noite, [Nome]!"*).
+  - **Próximo Compromisso:** Contagem regressiva em tempo real com indicador visual (*"⏱️ Próxima atividade em X minutos"*).
+  - **Linha do Tempo Vertical:** Sequência cronológica das atividades do dia sob responsabilidade do membro, com horários, participantes e locais.
+  - **Tranquilidade Familiar:** Card de visibilidade sutil com as atividades que o outro cônjuge/responsável assumiu no dia.
+- **📊 Modo Planejamento — "Balanço da Semana":**
+  - **Total de Atividades:** Quantitativo consolidado da semana visível.
+  - **Divisão da Logística Familiar:** Barra comparativa visual e percentual da carga de compromissos assumida por cada cônjuge vs tarefas sem responsável.
+  - **Destaque de Pendências:** Alerta amarelo para eventos sem responsável com botão de ação direta **"Atribuir Agora"** (abrindo o `UnassignedActivitiesModal`).
+  - **Distribuição por Filho:** Contagem e agrupamento de compromissos por dependente.
+  - **Datas Especiais & Aniversários:** Destaque de eventos de dia inteiro (`is_all_day`) com badges comemorativos (`🎂` e `📌`).
+- **Navegação & Atalhos:** Botões dedicados **"📊 Resumo & Balanço"** no Header e **"Balanço"** na barra temporal do calendário.
+- **Rodapé Global:** Tag de versão atualizada para `v1.3.0`.
+
+---
 
 ### [v1.1.0] — 2026-10-10
 #### 🤖 Fase 2: Quick Capture Multimodal com Gemini
