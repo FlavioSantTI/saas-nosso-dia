@@ -15,9 +15,11 @@ COPY apps/web ./
 # Argumentos de Build para o Vite
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_APP_URL=https://nossodia.flaviosantiago.com.br
 
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+ENV VITE_APP_URL=$VITE_APP_URL
 
 # Compilar para produção
 RUN npm run build

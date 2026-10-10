@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Family, FamilyMember, MemberRole } from '../types';
+import { getFamilyInviteUrl } from '../lib/url';
 
 interface FamilyManageModalProps {
   isOpen: boolean;
@@ -184,13 +185,13 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
               <input
                 type="text"
                 readOnly
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?join_family=${family.id}`}
+                value={getFamilyInviteUrl(family.id)}
                 className="flex-1 text-xs font-mono px-3 py-2 bg-white rounded-xl border border-sky-200 text-sky-950 focus:outline-none select-all"
               />
               <button
                 type="button"
                 onClick={() => {
-                  const inviteUrl = `${window.location.origin}/?join_family=${family.id}`;
+                  const inviteUrl = getFamilyInviteUrl(family.id);
                   navigator.clipboard.writeText(inviteUrl);
                   alert('Link de convite copiado com sucesso!');
                 }}
