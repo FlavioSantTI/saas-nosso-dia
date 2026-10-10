@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.0.3-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.1.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -53,9 +53,11 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
   - 🗑️ *Apenas esta ocorrência* — apaga o dia selecionado mantendo os outros intactos.
   - 🔥 *Excluir esta e todas as futuras* — apaga em série e encerra a rotina no banco.
 
-### 🤖 4. Captura Rápida com IA
-- Cole textos brutos vindos do WhatsApp, recados da escola ou e-mails.
-- A inteligência artificial extrai automaticamente título, participante, horário, responsável e local para confirmação instantânea.
+### 🤖 4. Captura Rápida Multimodal com Gemini (Fase 2)
+- **📝 Texto:** Cole textos brutos vindos do WhatsApp, recados da escola ou lembretes.
+- **🎙️ Mensagem de Voz:** Grave instruções de áudio pelo navegador com o `MediaRecorder` nativo e transcrição/estruturação via Gemini Flash.
+- **📸 Fotos & Documentos (PDF):** Envie fotos de avisos escolares, bilhetes impressos ou calendários em PDF para análise visual da IA.
+- **Card de Confirmação:** Extração com Structured Outputs (JSON Schema), exibindo badges coloridos dos membros identificados (Flávio, Silvia, Rafael) e papéis (Participante e Responsável).
 
 ### ⚠️ 5. Alerta de Conflitos & Atividades Sem Responsável
 - **Detecção de Sobreposição:** Alerta visual proeminente quando o mesmo adulto tiver dois compromissos no mesmo horário.
@@ -187,6 +189,27 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.1.0] — 2026-10-10
+#### 🤖 Fase 2: Quick Capture Multimodal com Gemini
+- **Serviço de IA (`gemini.ts`):** Integração direta com a API do Google Gemini (`gemini-flash-latest:generateContent`) com *Structured Outputs* (JSON Schema forçado).
+- **Entrada Multimodal Tripla (`QuickAddWithAI.tsx`):**
+  - **📝 Texto:** Extração de compromissos a partir de mensagens soltas de WhatsApp ou e-mails.
+  - **🎙️ Mensagem de Voz:** Gravação direta de áudio pelo navegador com `MediaRecorder` nativo e processamento via Gemini.
+  - **📸 Fotos & PDFs:** Upload e processamento visual de bilhetes escolares, calendários e avisos em imagem ou PDF.
+- **Card de Confirmação com Badges Coloridos:** Identificação e atribuição visual imediata de membros (Flávio, Silvia, Rafael) e seus papéis (Participante / Responsável) antes de salvar.
+
+#### ⚙️ CI/CD & Deploy no GHCR
+- **GitHub Actions Workflow (`deploy.yml`):** Esteira de integração contínua com validação estrita de TypeScript (`typecheck`), build do Vite e publicação de containers Docker no GitHub Container Registry (`ghcr.io/flaviosantti/saas-nosso-dia`).
+- **Versionamento de Containers:** Tags automáticas para `latest`, branch e SHA do commit.
+
+#### 🛡️ Banco de Dados & Estabilidade
+- **Correção de Políticas RLS no Supabase (`20261010000001_fix_rls_anon_permissions.sql`):** Políticas liberadas para atualização de nome de família, edição/exclusão de membros e rotinas para conexões da aplicação.
+- **Eliminação do Erro PGRST116:** Adoção de `.maybeSingle()` e validação segura de retorno no Supabase.
+- **Link de Convite de Produção:** Utilitário centralizado `getFamilyInviteUrl()` garantindo que o link de convite utilize sempre o domínio de produção (`https://nossodia.flaviosantiago.com.br/`).
+- **Rodapé Global:** Atualizada a tag de versão para `v1.1.0`.
+
+---
 
 ### [v1.0.3] — 2026-10-09
 #### ✨ Adicionado
