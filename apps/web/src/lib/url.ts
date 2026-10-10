@@ -25,5 +25,5 @@ export const getAppBaseUrl = (): string => {
  */
 export const getFamilyInviteUrl = (familyId: string): string => {
   const baseUrl = getAppBaseUrl();
-  return `${baseUrl}/?join_family=${familyId}`;
+  return `${baseUrl}/?invite=${familyId}`;
 };

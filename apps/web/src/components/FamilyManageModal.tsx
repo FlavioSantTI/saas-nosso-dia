@@ -172,11 +172,10 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
             </div>
           </div>
 
-          {/* Seção: Convidar Responsável */}
-          {/* Seção: Convidar Responsável */}
+          {/* Seção: Convidar Cônjuge/Responsável */}
           <div className="bg-sky-50/80 p-4 rounded-2xl border border-sky-200/90 space-y-2">
             <label className="block text-xs font-bold uppercase tracking-wider text-sky-800">
-              Convidar Responsável
+              🔗 Convidar Cônjuge/Responsável
             </label>
             <p className="text-xs text-sky-700 mb-2">
               Compartilhe o link abaixo para outro adulto acessar e gerenciar a família.
@@ -197,7 +196,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                 }}
                 className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
               >
-                Copiar Link
+                Copiar Link de Convite
               </button>
             </div>
           </div>

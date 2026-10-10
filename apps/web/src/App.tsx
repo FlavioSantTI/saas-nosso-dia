@@ -10,6 +10,8 @@ import { AddManualActivityModal } from './components/AddManualActivityModal';
 import { EditActivityModal } from './components/EditActivityModal';
 import { UnassignedActivitiesModal } from './components/UnassignedActivitiesModal';
 import { FamilyManageModal } from './components/FamilyManageModal';
+import { AuthModal } from './components/AuthModal';
+import { SummaryModal } from './components/SummaryModal';
 import { Onboarding } from './components/Onboarding';
 import { supabase } from './lib/supabase';
 import { startNotificationScheduler, requestNotificationPermission } from './lib/notifications';
@@ -281,6 +283,16 @@ export const App: React.FC = () => {
   const [activeToastNotification, setActiveToastNotification] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
+  // Estados de Autenticação Supabase
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [currentMember, setCurrentMember] = useState<FamilyMember | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [inviteFamilyId, setInviteFamilyId] = useState<string | null>(null);
+
+  // Estados do Painel de Resumo (Meu Dia e Balanço)
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [summaryInitialTab, setSummaryInitialTab] = useState<'today' | 'week'>('today');
+
   // Navegação Temporal
   const handlePrevDate = () => {
     setCurrentDate((prev) => {
@@ -329,10 +341,11 @@ export const App: React.FC = () => {
       let query = supabase.from('families').select('*');
       
       const urlParams = new URLSearchParams(window.location.search);
-      const joinFamilyId = urlParams.get('join_family');
+      const joinFamilyId = urlParams.get('invite') || urlParams.get('join_family');
 
       if (joinFamilyId) {
         query = query.eq('id', joinFamilyId);
+        setInviteFamilyId(joinFamilyId);
       } else {
         query = query.order('created_at', { ascending: true }).limit(1);
       }
@@ -346,7 +359,7 @@ export const App: React.FC = () => {
         return;
       }
 
-      // Se entrou por invite, podemos remover o parametro da url para limpar
+      // Se entrou por invite, podemos remover o parametro da url para manter limpo
       if (joinFamilyId) {
         window.history.replaceState({}, '', window.location.pathname);
       }
@@ -465,6 +478,87 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Monitoramento de Sessão de Autenticação (Supabase Auth)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUser(session?.user ?? null);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user ?? null);
+    });
+
+    // Se entrou com convite (?invite=) e não está logado, abre o AuthModal automaticamente
+    const urlParams = new URLSearchParams(window.location.search);
+    const inviteParam = urlParams.get('invite') || urlParams.get('join_family');
+    if (inviteParam) {
+      setInviteFamilyId(inviteParam);
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session?.user) {
+          setIsAuthModalOpen(true);
+        }
+      });
+    }
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Sincronização do Membro Logado com base no Usuário do Supabase Auth
+  useEffect(() => {
+    if (!currentUser || members.length === 0) {
+      setCurrentMember(null);
+      return;
+    }
+
+    // 1. Procura membro com user_id explicitamente vinculado
+    const linked = members.find((m) => m.user_id === currentUser.id);
+    if (linked) {
+      setCurrentMember(linked);
+      return;
+    }
+
+    // 2. Procura membro com o mesmo nome
+    const userName = (currentUser.user_metadata?.name || '').toLowerCase().trim();
+    if (userName) {
+      const match = members.find(
+        (m) => m.name.toLowerCase().trim() === userName
+      );
+      if (match) {
+        setCurrentMember(match);
+        if (!match.user_id) {
+          supabase
+            .from('family_members')
+            .update({ user_id: currentUser.id })
+            .eq('id', match.id)
+            .then();
+        }
+        return;
+      }
+    }
+
+    // 3. Fallback: Primeiro adulto da família
+    const defaultAdult = members.find((m) => m.role !== 'CHILD') || members[0];
+    setCurrentMember(defaultAdult || null);
+  }, [currentUser, members]);
+
+  // Logout
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setCurrentMember(null);
+    await loadData();
+  };
+
+  // Abrir Resumo / Balanço
+  const handleOpenSummary = (initialTab: 'today' | 'week' = 'today') => {
+    setSummaryInitialTab(initialTab);
+    setIsSummaryModalOpen(true);
+  };
 
   // Agendador de Notificações em segundo plano para os eventos da semana
   useEffect(() => {
@@ -1167,6 +1261,11 @@ export const App: React.FC = () => {
         onOpenManageFamily={() => setIsManageFamilyOpen(true)}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
         onOpenNewActivity={() => setIsManualAddOpen(true)}
+        onOpenSummary={handleOpenSummary}
+        currentUser={currentUser}
+        currentMember={currentMember}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
         hasActiveAlert={!!activeToastNotification}
       />
 
@@ -1179,6 +1278,7 @@ export const App: React.FC = () => {
           onNext={handleNextDate}
           onToday={handleToday}
           onViewModeChange={(mode) => setViewMode(mode)}
+          onOpenSummary={handleOpenSummary}
         />
 
         {/* Banner de Atividades Sem Responsável */}
@@ -1332,6 +1432,36 @@ export const App: React.FC = () => {
         onAddMember={handleAddMember}
         onUpdateMember={handleUpdateMember}
         onDeleteMember={handleDeleteMember}
+      />
+
+      {/* Modal: Autenticação e Convite da Família */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        inviteFamilyId={inviteFamilyId}
+        family={family}
+        members={members}
+        onAuthSuccess={(user, linkedMember) => {
+          setCurrentUser(user);
+          if (linkedMember) {
+            setCurrentMember(linkedMember);
+          }
+          loadData();
+        }}
+      />
+
+      {/* Modal: Resumo Operacional "☀️ Meu Dia Hoje" e Planejamento "📊 Balanço da Semana" */}
+      <SummaryModal
+        isOpen={isSummaryModalOpen}
+        onClose={() => setIsSummaryModalOpen(false)}
+        initialTab={summaryInitialTab}
+        events={events}
+        members={members}
+        currentMember={currentMember}
+        onOpenUnassignedModal={() => {
+          setIsSummaryModalOpen(false);
+          setIsUnassignedModalOpen(true);
+        }}
       />
     </div>
   );

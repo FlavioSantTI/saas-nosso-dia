@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, BarChart3 } from 'lucide-react';
 
 export type CalendarViewMode = 'day' | 'week' | 'month';
 
@@ -10,6 +10,7 @@ interface CalendarNavigationProps {
   onNext: () => void;
   onToday: () => void;
   onViewModeChange: (mode: CalendarViewMode) => void;
+  onOpenSummary?: (mode?: 'today' | 'week') => void;
 }
 
 const MONTH_NAMES = [
@@ -74,6 +75,7 @@ export const CalendarNavigation: React.FC<CalendarNavigationProps> = ({
   onNext,
   onToday,
   onViewModeChange,
+  onOpenSummary,
 }) => {
   const title = formatTitle(currentDate, viewMode);
 
@@ -124,8 +126,19 @@ export const CalendarNavigation: React.FC<CalendarNavigationProps> = ({
         </h2>
       </div>
 
-      {/* Segmented Control de Modos de Visualização (Estilo macOS / iOS) */}
-      <div className="flex items-center justify-end">
+      {/* Segmented Control de Modos de Visualização e Botão Resumo */}
+      <div className="flex items-center justify-end gap-2">
+        {onOpenSummary && (
+          <button
+            type="button"
+            onClick={() => onOpenSummary('week')}
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-50/80 hover:bg-sky-100/80 text-sky-800 border border-sky-200/70 transition-all shadow-2xs cursor-pointer"
+            title="Ver Balanço da Semana"
+          >
+            <BarChart3 className="w-3.5 h-3.5 text-sky-600" />
+            <span>Balanço</span>
+          </button>
+        )}
         <div className="inline-flex bg-slate-200/50 p-1 rounded-xl gap-1 w-full sm:w-auto border border-slate-200/40">
           <button
             type="button"
