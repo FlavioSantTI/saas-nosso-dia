@@ -531,12 +531,19 @@ export const App: React.FC = () => {
       .update({ name: newName })
       .eq('id', family.id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       alert(`Erro ao atualizar nome da família: ${error.message}`);
-      return;
+      throw error;
     }
+
+    if (!updatedFamily) {
+      const msg = 'Não foi possível salvar o nome da família no banco (permissão RLS no Supabase necessária).';
+      alert(msg);
+      throw new Error(msg);
+    }
+
     setFamily(updatedFamily);
   };
 
