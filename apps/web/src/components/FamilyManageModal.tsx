@@ -11,6 +11,7 @@ interface FamilyManageModalProps {
   onAddMember: (member: { name: string; role: MemberRole; color: string }) => Promise<void>;
   onUpdateMember: (member: FamilyMember) => Promise<void>;
   onDeleteMember: (memberId: string) => Promise<void>;
+  onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 const COLOR_PALETTE = [
@@ -35,6 +36,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   onAddMember,
   onUpdateMember,
   onDeleteMember,
+  onToast,
 }) => {
   const [familyName, setFamilyName] = useState(family.name);
   const [isUpdatingFamily, setIsUpdatingFamily] = useState(false);
@@ -192,7 +194,11 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                 onClick={() => {
                   const inviteUrl = getFamilyInviteUrl(family.id);
                   navigator.clipboard.writeText(inviteUrl);
-                  alert('Link de convite copiado com sucesso!');
+                  if (onToast) {
+                    onToast('🔗 Link de convite copiado para a área de transferência!', 'success');
+                  } else {
+                    alert('Link de convite copiado com sucesso!');
+                  }
                 }}
                 className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
               >

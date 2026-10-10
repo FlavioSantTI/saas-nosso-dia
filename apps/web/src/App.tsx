@@ -12,6 +12,8 @@ import { UnassignedActivitiesModal } from './components/UnassignedActivitiesModa
 import { FamilyManageModal } from './components/FamilyManageModal';
 import { AuthModal } from './components/AuthModal';
 import { SummaryModal } from './components/SummaryModal';
+import { DailyBriefingCard } from './components/DailyBriefingCard';
+import { Toast, ToastItem, ToastType } from './components/Toast';
 import { Onboarding } from './components/Onboarding';
 import { supabase } from './lib/supabase';
 import { startNotificationScheduler, requestNotificationPermission } from './lib/notifications';
@@ -292,6 +294,18 @@ export const App: React.FC = () => {
   // Estados do Painel de Resumo (Meu Dia e Balanço)
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [summaryInitialTab, setSummaryInitialTab] = useState<'today' | 'week'>('today');
+
+  // Estados de Notificações Toast Flutuantes
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const showToast = useCallback((message: string, type: ToastType = 'success') => {
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    setToasts((prev) => [...prev, { id, type, message }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Navegação Temporal
   const handlePrevDate = () => {
@@ -860,8 +874,10 @@ export const App: React.FC = () => {
       );
 
       await loadData();
+      showToast('✓ Alterações salvas com sucesso!', 'success');
     } catch (err) {
       console.error('Falha ao salvar edição:', err);
+      showToast('⚠️ Não foi possível salvar. Tente novamente.', 'error');
     }
   };
 
@@ -877,8 +893,10 @@ export const App: React.FC = () => {
         console.error('Erro ao deletar ocorrência única no Supabase:', error);
       }
       await loadData();
+      showToast('🗑️ Atividade removida da semana.', 'success');
     } catch (err) {
       console.error('Falha ao excluir evento único:', err);
+      showToast('⚠️ Não foi possível salvar. Tente novamente.', 'error');
       await loadData();
     }
   };
@@ -905,8 +923,10 @@ export const App: React.FC = () => {
         .eq('id', routineId);
 
       await loadData();
+      showToast('🗑️ Atividade removida da semana.', 'success');
     } catch (err) {
       console.error('Falha ao excluir série de rotina:', err);
+      showToast('⚠️ Não foi possível salvar. Tente novamente.', 'error');
       await loadData();
     }
   };
@@ -932,8 +952,11 @@ export const App: React.FC = () => {
         console.error('Erro ao atualizar responsável do evento no Supabase:', error);
       }
       await loadData();
+      const memberName = memberObj?.name || 'Membro';
+      showToast(`👤 ${memberName} definido como responsável!`, 'success');
     } catch (err) {
       console.error('Falha ao atribuir responsável único:', err);
+      showToast('⚠️ Não foi possível salvar. Tente novamente.', 'error');
       await loadData();
     }
   };
@@ -966,8 +989,11 @@ export const App: React.FC = () => {
         console.error('Erro ao atualizar responsáveis da série no Supabase:', error);
       }
       await loadData();
+      const memberName = memberObj?.name || 'Membro';
+      showToast(`👤 ${memberName} definido como responsável!`, 'success');
     } catch (err) {
       console.error('Falha ao atribuir responsável da série:', err);
+      showToast('⚠️ Não foi possível salvar. Tente novamente.', 'error');
       await loadData();
     }
   };
@@ -1176,8 +1202,10 @@ export const App: React.FC = () => {
 
       // 7. Atualiza o estado da tela recarregando os dados do banco
       await loadData();
+      showToast('🎉 Atividade adicionada à rotina com sucesso!', 'success');
     } catch (err) {
       console.error('Falha ao persistir atividade:', err);
+      showToast('⚠️ Não foi possível salvar. Tente novamente.', 'error');
     }
   };
 
@@ -1238,7 +1266,10 @@ export const App: React.FC = () => {
   const unassignedCount = events.filter((e) => !e.responsible_id).length;
 
   return (
-    <div className="min-h-screen bg-[#F4F8FA] text-slate-800 flex flex-col font-sans relative">
+    <div className="min-h-screen bg-[#F4F8FA] text-slate-800 flex flex-col font-sans relative overflow-x-hidden">
+      {/* Sistema de Feedback Visual (Toasts de Sucesso e Erro) */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
+
       {/* Toast de Notificação de Atividade em Tempo Real */}
       {activeToastNotification && (
         <div className="fixed top-4 right-4 z-50 max-w-sm w-full bg-slate-950 text-white border border-amber-500/60 shadow-2xl rounded-2xl p-4 flex items-start gap-3 animate-in slide-in-from-top-3 duration-300 ring-2 ring-amber-500/20">
@@ -1278,6 +1309,15 @@ export const App: React.FC = () => {
           onNext={handleNextDate}
           onToday={handleToday}
           onViewModeChange={(mode) => setViewMode(mode)}
+          onOpenSummary={handleOpenSummary}
+        />
+
+        {/* Relatório Diário Matinal ("Briefing do Dia") */}
+        <DailyBriefingCard
+          events={events}
+          members={members}
+          currentMember={currentMember}
+          onCardClick={handleCardClick}
           onOpenSummary={handleOpenSummary}
         />
 
@@ -1432,6 +1472,7 @@ export const App: React.FC = () => {
         onAddMember={handleAddMember}
         onUpdateMember={handleUpdateMember}
         onDeleteMember={handleDeleteMember}
+        onToast={showToast}
       />
 
       {/* Modal: Autenticação e Convite da Família */}

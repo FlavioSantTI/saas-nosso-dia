@@ -6,7 +6,7 @@ interface AddManualActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   members: FamilyMember[];
-  onSave: (activity: any) => void;
+  onSave: (activity: any) => Promise<void> | void;
 }
 
 export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
@@ -26,6 +26,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
   const [location, setLocation] = useState('');
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(15);
   const [endDate, setEndDate] = useState(''); // data final opcional para rotinas
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
 
@@ -59,39 +60,47 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
     );
   };
 
-  const handleSave = () => {
-    // Verifica permissão de notificação ao salvar
-    requestNotificationPermission();
+  const handleSave = async () => {
+    if (isSaving) return;
+    try {
+      setIsSaving(true);
+      // Verifica permissão de notificação ao salvar
+      requestNotificationPermission();
 
-    const responsible = members.find(m => m.id === responsibleId) || null;
-    const participants = members.filter(m => selectedParticipants.includes(m.id));
-    
-    onSave({
-      title,
-      type,
-      days,
-      is_all_day: isAllDay,
-      startTime: isAllDay ? '00:00' : startTime,
-      duration: isAllDay ? 1440 : parseInt(duration, 10),
-      participants,
-      responsible,
-      location,
-      reminder_minutes: reminderMinutes,
-      end_date: endDate || null
-    });
+      const responsible = members.find(m => m.id === responsibleId) || null;
+      const participants = members.filter(m => selectedParticipants.includes(m.id));
+      
+      await onSave({
+        title,
+        type,
+        days,
+        is_all_day: isAllDay,
+        startTime: isAllDay ? '00:00' : startTime,
+        duration: isAllDay ? 1440 : parseInt(duration, 10),
+        participants,
+        responsible,
+        location,
+        reminder_minutes: reminderMinutes,
+        end_date: endDate || null
+      });
 
-    // Reset form
-    setTitle('');
-    setType('RECURRING');
-    setDays([]);
-    setIsAllDay(false);
-    setStartTime('');
-    setDuration('60');
-    setSelectedParticipants([]);
-    setResponsibleId('');
-    setLocation('');
-    setReminderMinutes(15);
-    setEndDate('');
+      // Reset form
+      setTitle('');
+      setType('RECURRING');
+      setDays([]);
+      setIsAllDay(false);
+      setStartTime('');
+      setDuration('60');
+      setSelectedParticipants([]);
+      setResponsibleId('');
+      setLocation('');
+      setReminderMinutes(15);
+      setEndDate('');
+    } catch (err) {
+      console.error('Erro ao salvar atividade:', err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -306,10 +315,10 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
           <button 
             type="button"
             onClick={handleSave}
-            disabled={!title || (!isAllDay && !startTime)}
+            disabled={!title || (!isAllDay && !startTime) || isSaving}
             className="px-5 py-2.5 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xs hover:shadow cursor-pointer"
           >
-            Salvar Atividade
+            {isSaving ? 'Salvando...' : 'Salvar Atividade'}
           </button>
         </div>
       </div>
