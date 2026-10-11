@@ -388,17 +388,47 @@ export const App: React.FC = () => {
   // Carrega família, membros, locais e eventos do Supabase filtrados pela data visível
   const loadData = useCallback(async () => {
     try {
-      // 1. Busca família cadastrada
-      let query = supabase.from('families').select('*');
-      
+      // 0. Verifica autenticação no Supabase Auth
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const sessionUser = session?.user ?? null;
+      setCurrentUser(sessionUser);
+
       const urlParams = new URLSearchParams(window.location.search);
       const joinFamilyId = urlParams.get('invite') || urlParams.get('join_family');
+
+      // Se o usuário não está logado e não há convite com ID de família:
+      // Não carrega a família automaticamente para garantir privacidade e manter na tela de login/onboarding
+      if (!sessionUser && !joinFamilyId) {
+        setFamily(null);
+        setMembers([]);
+        setEvents([]);
+        setCurrentMember(null);
+        setIsInitialLoading(false);
+        return;
+      }
+
+      // 1. Busca família cadastrada
+      let query = supabase.from('families').select('*');
 
       if (joinFamilyId) {
         query = query.eq('id', joinFamilyId);
         setInviteFamilyId(joinFamilyId);
-      } else {
-        query = query.order('created_at', { ascending: true }).limit(1);
+      } else if (sessionUser) {
+        // Tenta buscar a família vinculada ao usuário logado
+        const { data: memberRows } = await supabase
+          .from('family_members')
+          .select('family_id')
+          .eq('user_id', sessionUser.id)
+          .limit(1);
+
+        if (memberRows && memberRows.length > 0 && memberRows[0].family_id) {
+          query = query.eq('id', memberRows[0].family_id);
+        } else {
+          // Se o usuário logado ainda não possui vínculo de user_id, usa a primeira família existente
+          query = query.order('created_at', { ascending: true }).limit(1);
+        }
       }
 
       const { data: familiesData, error: famError } = await query;
@@ -538,8 +568,17 @@ export const App: React.FC = () => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setCurrentUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      const user = session?.user ?? null;
+      setCurrentUser(user);
+      if (event === 'SIGNED_OUT' || !user) {
+        setFamily(null);
+        setMembers([]);
+        setEvents([]);
+        setCurrentMember(null);
+      } else if (event === 'SIGNED_IN') {
+        loadData();
+      }
     });
 
     // Se entrou com convite (?invite=) e não está logado, abre o AuthModal automaticamente
@@ -1320,9 +1359,30 @@ export const App: React.FC = () => {
     );
   }
 
-  // 2. Tela de Onboarding (quando não houver família cadastrada no Supabase)
+  // 2. Tela de Onboarding / Login (quando não houver família cadastrada ou usuário deslogado)
   if (!family) {
-    return <Onboarding onComplete={handleCreateFamily} />;
+    return (
+      <>
+        <Onboarding
+          onComplete={handleCreateFamily}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+        />
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          inviteFamilyId={inviteFamilyId}
+          family={family}
+          members={members}
+          onAuthSuccess={(user, linkedMember) => {
+            setCurrentUser(user);
+            if (linkedMember) {
+              setCurrentMember(linkedMember);
+            }
+            loadData();
+          }}
+        />
+      </>
+    );
   }
 
   const unassignedCount = events.filter((e) => !e.responsible_id).length;

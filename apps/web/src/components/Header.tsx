@@ -86,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
     ? getMemberDisplayName(currentMember)
     : getFirstName(rawDisplayName) || 'Família';
   const memberColor = currentMember?.color || '#0284C7';
-  const hasActiveSession = !!family || !!currentUser;
+  const hasActiveSession = !!currentUser;
 
   return (
     <header className="bg-white/85 backdrop-blur-md border-b border-sky-100/80 sticky top-0 z-30 shadow-xs">

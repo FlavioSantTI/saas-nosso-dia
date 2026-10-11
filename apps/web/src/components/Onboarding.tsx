@@ -14,6 +14,7 @@ interface OnboardingProps {
     familyName: string;
     members: Array<{ name: string; nickname?: string | null; role: MemberRole; color: string }>;
   }) => Promise<void>;
+  onOpenAuth?: () => void;
 }
 
 const COLOR_PALETTE = [
@@ -29,7 +30,7 @@ const COLOR_PALETTE = [
   '#475569', // Ardósia
 ];
 
-export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
+export const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onOpenAuth }) => {
   const [familyName, setFamilyName] = useState('Família Santiago');
   const [members, setMembers] = useState<OnboardingMember[]>([
     { id: '1', name: 'Flávio Dias Santiago', nickname: 'Flávio', role: 'ADMIN', color: '#0284C7' },
@@ -119,7 +120,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     <div className="min-h-screen bg-linear-to-b from-slate-900 to-slate-800 text-slate-900 flex items-center justify-center p-4 sm:p-6 font-sans">
       <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-10 border border-slate-100 flex flex-col">
         {/* Header de Boas-Vindas */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <img
             src="/icons/pwa-192x192.png"
             alt="Nosso Dia"
@@ -132,6 +133,23 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             Vamos configurar sua família para sincronizar as rotinas, atividades e responsáveis em um só lugar.
           </p>
         </div>
+
+        {/* Banner para usuário que já possui conta / Login */}
+        {onOpenAuth && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 mb-6 bg-sky-50/80 border border-sky-200/80 rounded-2xl text-xs">
+            <div className="flex items-center gap-2.5 text-slate-700">
+              <span className="text-lg">🔐</span>
+              <span className="font-medium">Já possui uma conta ou família cadastrada?</span>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              className="w-full sm:w-auto px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap text-center"
+            >
+              Entrar na Minha Conta
+            </button>
+          </div>
+        )}
 
         {errorMsg && (
           <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center gap-2">
