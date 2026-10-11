@@ -12,6 +12,7 @@ import {
   Sun,
   MoreVertical,
   ShieldCheck,
+  Loader2,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -44,8 +45,21 @@ export const Header: React.FC<HeaderProps> = ({
   const [logoError, setLogoError] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleLogoutClick = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await onLogout();
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   // Fecha menus ao clicar fora
   useEffect(() => {
@@ -242,14 +256,19 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="pt-1 border-t border-slate-100">
                       <button
                         type="button"
+                        disabled={isLoggingOut}
                         onClick={async () => {
                           setIsUserMenuOpen(false);
-                          await onLogout();
+                          await handleLogoutClick();
                         }}
-                        className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                        className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
                       >
-                        <LogOut className="w-4 h-4" />
-                        <span>Sair da Conta</span>
+                        {isLoggingOut ? (
+                          <Loader2 className="w-4 h-4 text-rose-600 animate-spin" />
+                        ) : (
+                          <LogOut className="w-4 h-4" />
+                        )}
+                        <span>{isLoggingOut ? 'Saindo...' : 'Sair da Conta'}</span>
                       </button>
                     </div>
                   </div>
@@ -259,12 +278,17 @@ export const Header: React.FC<HeaderProps> = ({
               {/* Botão de Ação Direta: [ 🚪 Sair ] */}
               <button
                 type="button"
-                onClick={onLogout}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100/80 border border-rose-200/70 transition-all shadow-2xs cursor-pointer"
+                disabled={isLoggingOut}
+                onClick={handleLogoutClick}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100/80 border border-rose-200/70 transition-all shadow-2xs cursor-pointer disabled:opacity-60"
                 title="Sair da Conta e Família"
               >
-                <LogOut className="w-3.5 h-3.5 text-rose-600" />
-                <span className="hidden md:inline">Sair</span>
+                {isLoggingOut ? (
+                  <Loader2 className="w-3.5 h-3.5 text-rose-600 animate-spin" />
+                ) : (
+                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                )}
+                <span className="hidden md:inline">{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
               </button>
             </div>
           ) : (
@@ -401,14 +425,19 @@ export const Header: React.FC<HeaderProps> = ({
                   {hasActiveSession ? (
                     <button
                       type="button"
+                      disabled={isLoggingOut}
                       onClick={async () => {
                         setIsMobileMenuOpen(false);
-                        await onLogout();
+                        await handleLogoutClick();
                       }}
-                      className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
+                      className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer disabled:opacity-60"
                     >
-                      <LogOut className="w-4 h-4" />
-                      <span>Sair da Conta</span>
+                      {isLoggingOut ? (
+                        <Loader2 className="w-4 h-4 text-rose-600 animate-spin" />
+                      ) : (
+                        <LogOut className="w-4 h-4" />
+                      )}
+                      <span>{isLoggingOut ? 'Saindo...' : 'Sair da Conta'}</span>
                     </button>
                   ) : (
                     <button

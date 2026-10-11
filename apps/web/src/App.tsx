@@ -597,12 +597,29 @@ export const App: React.FC = () => {
     setCurrentMember(defaultAdult || null);
   }, [currentUser, members]);
 
-  // Logout
+  // Função canônica de Logout
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setCurrentUser(null);
-    setCurrentMember(null);
-    await loadData();
+    try {
+      // 1. Encerra a sessão no Supabase
+      await supabase.auth.signOut();
+
+      // 2. Limpa dados e tokens do armazenamento local
+      localStorage.clear();
+      sessionStorage.clear();
+
+      // 3. Reseta os estados locais da aplicação
+      setCurrentUser(null);
+      setCurrentMember(null);
+      setFamily(null);
+      setMembers([]);
+      setEvents([]);
+
+      // 4. Recarrega a página na raiz para forçar o retorno à tela de login/onboarding
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+      window.location.href = '/';
+    }
   };
 
   // Abrir Resumo / Balanço
