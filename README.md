@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.4.1-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.5.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,24 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.5.0] — 2026-10-11
+#### 🚪 Refinamento do Fluxo de Autenticação, Logout Canônico & Roteamento Standalone
+- **Redirecionamento Imediato no Logout (`handleLogout`):**
+  - Encerramento completo e seguro da sessão no Supabase Auth (`supabase.auth.signOut()`).
+  - Limpeza profunda de tokens e credenciais locais (`localStorage.clear()` e `sessionStorage.clear()`).
+  - Reset imediato em memória de todos os estados reativos da aplicação (`currentUser = null`, `currentMember = null`, `family = null`, `members = []`, `events = []`).
+  - Transição instantânea sem recarregamento forçado de página (`authView = 'login'`), eliminando o efeito de piscamento ou reabertura do painel.
+- **Tela de Entrada Limpa de Login (`AuthModal.tsx` Standalone):**
+  - Usuários deslogados agora são direcionados para uma tela de Login limpa e dedicada com campos de E-mail e Senha, abas alternadoras [ Entrar ] / [ Criar Conta ], logotipo oficial redondo e botão de ação direta *"Entrar no Nosso Dia"*.
+  - **Link Discreto de Criação:** Inclusão no rodapé do card: *"Ainda não tem uma família cadastrada? [Criar Família]"*, permitindo acesso ao Onboarding sob demanda.
+- **Blindagem de Carregamento sem Sessão Ativa (`App.tsx`):**
+  - A função `loadData()` passa a exigir sessão ativa no Supabase Auth antes de consultar dados de famílias, bloqueando consultas anônimas automáticas a tenants e mantendo a privacidade estrita da família.
+  - Sincronização em tempo real via listener `onAuthStateChange` para zerar o estado da interface no evento `SIGNED_OUT`.
+- **Feedback Visual Aprimorado (`Header.tsx`):**
+  - Animação de carregamento (`Loader2`) e texto dinâmico *"Saindo..."* ao clicar no botão de logout, com bloqueio contra múltiplos cliques acidentais.
+  - Detecção rigorosa de sessão ativa baseada estritamente em `!!currentUser`.
+- **Rodapé Global:** Tag de versão atualizada para `v1.5.0`.
 
 ### [v1.4.1] — 2026-10-11
 #### 🛡️ Módulo Super-Admin (`/admin`), Faturamento Asaas & Blindagem LGPD
