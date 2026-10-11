@@ -10,6 +10,9 @@ interface AuthModalProps {
   family?: Family | null;
   members?: FamilyMember[];
   onAuthSuccess: (user: any, linkedMember?: FamilyMember | null) => void;
+  initialTab?: 'login' | 'register';
+  onSwitchToOnboarding?: () => void;
+  isStandalone?: boolean;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -19,12 +22,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   family,
   members = [],
   onAuthSuccess,
+  initialTab = 'login',
+  onSwitchToOnboarding,
+  isStandalone = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>(initialTab);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
+
+  // Atualiza activeTab quando initialTab mudar
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +81,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen && !isStandalone) return null;
 
   // Filtra membros adultos da família que podem ser vinculados
   const unlinkedAdultMembers = members.filter(
@@ -218,32 +231,56 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-sky-100 flex flex-col">
-        {/* Header do Modal */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-sky-100 flex items-center justify-center text-sky-700 font-bold text-sm">
-              🔐
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900 leading-tight">
-                {activeTab === 'login' ? 'Acessar Nosso Dia' : 'Criar Conta Familiar'}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {activeTab === 'login'
-                  ? 'Entre com suas credenciais do Supabase'
-                  : 'Cadastre-se para gerenciar a rotina familiar'}
-              </p>
-            </div>
+    <div
+      className={
+        isStandalone
+          ? 'min-h-screen bg-linear-to-b from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center p-4 sm:p-6 font-sans animate-in fade-in duration-200'
+          : 'fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150'
+      }
+    >
+      <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-sky-100 flex flex-col">
+        {/* Header do Modal / Standalone */}
+        {isStandalone ? (
+          <div className="text-center mb-5">
+            <img
+              src="/icons/logo-round-1024.png"
+              alt="Logo Nosso Dia"
+              className="w-16 h-16 rounded-full mx-auto mb-3 shadow-md border border-sky-100 object-cover"
+            />
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              {activeTab === 'login' ? 'Acessar Nosso Dia' : 'Criar Conta Familiar'}
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">
+              {activeTab === 'login'
+                ? 'Entre com seu e-mail e senha cadastrados'
+                : 'Cadastre-se para gerenciar a rotina familiar'}
+            </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        ) : (
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-sky-100 flex items-center justify-center text-sky-700 font-bold text-sm">
+                🔐
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900 leading-tight">
+                  {activeTab === 'login' ? 'Acessar Nosso Dia' : 'Criar Conta Familiar'}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {activeTab === 'login'
+                    ? 'Entre com suas credenciais do Supabase'
+                    : 'Cadastre-se para gerenciar a rotina familiar'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Banner de Convite Inteligente */}
         {inviteFamilyId && (
@@ -313,7 +350,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {activeTab === 'register' && (
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Seu Nome
+                Seu Nome Completo
               </label>
               <div className="relative">
                 <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
@@ -322,7 +359,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Flávio Santiago ou Silvia"
+                  placeholder="Ex: Flávio Santiago"
                   className="w-full text-xs font-medium pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
                 />
               </div>
@@ -388,7 +425,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full mt-2 py-3 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading ? (
               <>
@@ -396,12 +433,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span>Processando...</span>
               </>
             ) : activeTab === 'login' ? (
-              <span>Entrar na Família</span>
+              <span>Entrar no Nosso Dia</span>
             ) : (
               <span>Criar Conta & Sincronizar</span>
             )}
           </button>
         </form>
+
+        {/* Rodapé: Link discreto para Criar Família (Onboarding) */}
+        {onSwitchToOnboarding && (
+          <div className="mt-5 pt-4 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-500">
+              Ainda não tem uma família cadastrada?{' '}
+              <button
+                type="button"
+                onClick={onSwitchToOnboarding}
+                className="font-bold text-sky-600 hover:text-sky-700 underline underline-offset-2 cursor-pointer transition-colors"
+              >
+                Criar Família
+              </button>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

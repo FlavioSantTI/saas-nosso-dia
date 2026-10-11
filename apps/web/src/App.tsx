@@ -290,6 +290,7 @@ export const App: React.FC = () => {
   // Estados de Autenticação Supabase
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [currentMember, setCurrentMember] = useState<FamilyMember | null>(null);
+  const [authView, setAuthView] = useState<'login' | 'signup' | 'onboarding'>('login');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [inviteFamilyId, setInviteFamilyId] = useState<string | null>(null);
 
@@ -646,18 +647,18 @@ export const App: React.FC = () => {
       localStorage.clear();
       sessionStorage.clear();
 
-      // 3. Reseta os estados locais da aplicação
+      // 3. Reseta os estados locais da aplicação e define a tela de login imediatamente
       setCurrentUser(null);
       setCurrentMember(null);
       setFamily(null);
       setMembers([]);
       setEvents([]);
-
-      // 4. Recarrega a página na raiz para forçar o retorno à tela de login/onboarding
-      window.location.href = '/';
+      setAuthView('login');
+      setIsAuthModalOpen(true);
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
-      window.location.href = '/';
+      setAuthView('login');
+      setIsAuthModalOpen(true);
     }
   };
 
@@ -1348,7 +1349,7 @@ export const App: React.FC = () => {
   };
 
   // 1. Tela de Carregamento Inicial
-  if (isInitialLoading && !family) {
+  if (isInitialLoading && !currentUser && !family) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white gap-3">
         <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
@@ -1359,29 +1360,36 @@ export const App: React.FC = () => {
     );
   }
 
-  // 2. Tela de Onboarding / Login (quando não houver família cadastrada ou usuário deslogado)
-  if (!family) {
-    return (
-      <>
+  // 2. Fluxo Deslogado / Autenticação (quando não houver sessão ativa ou família carregada)
+  if (!currentUser || !family) {
+    if (authView === 'onboarding') {
+      return (
         <Onboarding
           onComplete={handleCreateFamily}
-          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onOpenAuth={() => setAuthView('login')}
         />
-        <AuthModal
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          inviteFamilyId={inviteFamilyId}
-          family={family}
-          members={members}
-          onAuthSuccess={(user, linkedMember) => {
-            setCurrentUser(user);
-            if (linkedMember) {
-              setCurrentMember(linkedMember);
-            }
-            loadData();
-          }}
-        />
-      </>
+      );
+    }
+
+    // Tela padrão de entrada: Tela limpa de LOGIN (E-mail e Senha) com link discreto para Criar Família
+    return (
+      <AuthModal
+        isOpen={true}
+        isStandalone={true}
+        initialTab={authView === 'signup' ? 'register' : 'login'}
+        onClose={() => {}}
+        inviteFamilyId={inviteFamilyId}
+        family={family}
+        members={members}
+        onSwitchToOnboarding={() => setAuthView('onboarding')}
+        onAuthSuccess={(user, linkedMember) => {
+          setCurrentUser(user);
+          if (linkedMember) {
+            setCurrentMember(linkedMember);
+          }
+          loadData();
+        }}
+      />
     );
   }
 
