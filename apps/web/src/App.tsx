@@ -17,6 +17,8 @@ import { Toast, ToastItem, ToastType } from './components/Toast';
 import { Onboarding } from './components/Onboarding';
 import { supabase } from './lib/supabase';
 import { startNotificationScheduler, requestNotificationPermission } from './lib/notifications';
+import { getMemberDisplayName } from './lib/formatters';
+import { AdminDashboard } from './components/admin/AdminDashboard';
 
 const formatDateToYYYYMMDD = (d: Date): string => {
   const y = d.getFullYear();
@@ -294,6 +296,41 @@ export const App: React.FC = () => {
   // Estados do Painel de Resumo (Meu Dia e Balanço)
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [summaryInitialTab, setSummaryInitialTab] = useState<'today' | 'week'>('today');
+
+  // Estado para o Módulo Super-Admin (/admin)
+  const [isAdminViewOpen, setIsAdminViewOpen] = useState<boolean>(() => {
+    return (
+      window.location.pathname === '/admin' ||
+      window.location.search.includes('view=admin') ||
+      window.location.search.includes('admin=true')
+    );
+  });
+
+  const handleOpenAdmin = useCallback(() => {
+    setIsAdminViewOpen(true);
+    if (window.location.pathname !== '/admin') {
+      window.history.pushState({}, '', '/admin');
+    }
+  }, []);
+
+  const handleCloseAdmin = useCallback(() => {
+    setIsAdminViewOpen(false);
+    if (window.location.pathname === '/admin') {
+      window.history.pushState({}, '', '/');
+    }
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setIsAdminViewOpen(
+        window.location.pathname === '/admin' ||
+        window.location.search.includes('view=admin') ||
+        window.location.search.includes('admin=true')
+      );
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // Estados de Notificações Toast Flutuantes
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -592,7 +629,7 @@ export const App: React.FC = () => {
   // Fluxo de Onboarding: Criar Família e Membros Iniciais no Supabase
   const handleCreateFamily = async (data: {
     familyName: string;
-    members: Array<{ name: string; role: MemberRole; color: string }>;
+    members: Array<{ name: string; nickname?: string | null; role: MemberRole; color: string }>;
   }) => {
     // 1. Cria Família
     const { data: createdFamily, error: famErr } = await supabase
@@ -612,6 +649,7 @@ export const App: React.FC = () => {
     const memberRows = data.members.map((m) => ({
       family_id: createdFamily.id,
       name: m.name,
+      nickname: m.nickname?.trim() || null,
       role: m.role,
       color: m.color
     }));
@@ -656,13 +694,19 @@ export const App: React.FC = () => {
   };
 
   // Gestão de Família: Adicionar Novo Membro
-  const handleAddMember = async (memberData: { name: string; role: MemberRole; color: string }) => {
+  const handleAddMember = async (memberData: {
+    name: string;
+    nickname?: string | null;
+    role: MemberRole;
+    color: string;
+  }) => {
     if (!family) return;
     const { data: newMember, error } = await supabase
       .from('family_members')
       .insert({
         family_id: family.id,
         name: memberData.name,
+        nickname: memberData.nickname?.trim() || null,
         role: memberData.role,
         color: memberData.color
       })
@@ -682,6 +726,7 @@ export const App: React.FC = () => {
       .from('family_members')
       .update({
         name: updatedMember.name,
+        nickname: updatedMember.nickname?.trim() || null,
         role: updatedMember.role,
         color: updatedMember.color
       })
@@ -1297,6 +1342,7 @@ export const App: React.FC = () => {
         currentMember={currentMember}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
+        onOpenAdmin={handleOpenAdmin}
         hasActiveAlert={!!activeToastNotification}
       />
 
@@ -1365,7 +1411,7 @@ export const App: React.FC = () => {
                 style={{ backgroundColor: selectedMemberId === m.id ? m.color : undefined }}
               >
                 <span className="w-2.5 h-2.5 rounded-full shadow-2xs" style={{ backgroundColor: m.color }} />
-                {m.name}
+                {getMemberDisplayName(m)}
               </button>
             ))}
           </div>
@@ -1411,14 +1457,25 @@ export const App: React.FC = () => {
 
       {/* Rodapé Global */}
       <footer className="mt-auto py-6 border-t border-sky-100/80 bg-white/40 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="flex items-center gap-1.5 font-medium">
             <span className="font-bold text-slate-800">Nosso Dia</span>
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.4.0</span>
+            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.4.1</span>
           </p>
-          <p className="text-slate-400 text-xs">
-            Powered by <strong className="text-sky-700 font-semibold">Flavio Santiago Consultor IA</strong> — 2026
-          </p>
+
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={handleOpenAdmin}
+              className="text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-1 cursor-pointer font-medium text-xs"
+              title="Painel Super-Admin e Faturamento Asaas"
+            >
+              <span>🛡️ Super-Admin (/admin)</span>
+            </button>
+            <p className="text-slate-400 text-xs">
+              Powered by <strong className="text-sky-700 font-semibold">Flavio Santiago Consultor IA</strong> — 2026
+            </p>
+          </div>
         </div>
       </footer>
 
@@ -1504,6 +1561,14 @@ export const App: React.FC = () => {
           setIsUnassignedModalOpen(true);
         }}
       />
+
+      {/* Módulo Super-Admin (/admin) */}
+      {isAdminViewOpen && (
+        <AdminDashboard
+          onClose={handleCloseAdmin}
+          currentUser={currentUser}
+        />
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { EventItem, FamilyMember } from '../types';
+import { getMemberDisplayName } from '../lib/formatters';
 import {
   Clock,
   MapPin,
@@ -122,7 +123,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
     };
   }, [activeMember, members, todayEvents]);
 
-  const displayName = activeMember?.name || 'Família';
+  const displayName = getMemberDisplayName(activeMember) || 'Família';
 
   return (
     <div className="mb-5 bg-gradient-to-br from-white via-sky-50/40 to-amber-50/30 border border-sky-200/80 rounded-3xl p-4 sm:p-5 shadow-xs relative overflow-hidden transition-all duration-300">
@@ -223,7 +224,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                       });
                   const participantNames =
                     ev.participants && ev.participants.length > 0
-                      ? ev.participants.map((p) => p.name).join(', ')
+                      ? ev.participants.map((p) => getMemberDisplayName(p)).join(', ')
                       : null;
 
                   return (
@@ -273,7 +274,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
               <div className="flex items-center gap-2">
                 <span className="text-sm">ℹ️</span>
                 <span>
-                  <strong>A {spouseInfo.spouse.name} cuida de:</strong>{' '}
+                  <strong>A {getMemberDisplayName(spouseInfo.spouse)} cuida de:</strong>{' '}
                   {spouseInfo.events
                     .map((e) => {
                       const t = e.is_all_day

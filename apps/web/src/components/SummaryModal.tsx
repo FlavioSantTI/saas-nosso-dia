@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { EventItem, FamilyMember } from '../types';
+import { getMemberDisplayName } from '../lib/formatters';
 import {
   Sun,
   BarChart3,
@@ -70,12 +71,13 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
   // Saudação de acordo com o horário
   const currentHour = now.getHours();
+  const firstName = getMemberDisplayName(activeMember) || 'Família';
   const greeting =
     currentHour < 12
-      ? `☀️ Bom dia, ${activeMember?.name || 'Família'}! Suas missões para hoje:`
+      ? `☀️ Bom dia, ${firstName}! Suas missões para hoje:`
       : currentHour < 18
-      ? `🌤️ Boa tarde, ${activeMember?.name || 'Família'}! Suas missões para hoje:`
-      : `🌙 Boa noite, ${activeMember?.name || 'Família'}! Suas missões para hoje:`;
+      ? `🌤️ Boa tarde, ${firstName}! Suas missões para hoje:`
+      : `🌙 Boa noite, ${firstName}! Suas missões para hoje:`;
 
   // Próximo compromisso e contagem regressiva
   let nextEventStatus: {
@@ -246,7 +248,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                       .filter((m) => m.role !== 'CHILD')
                       .map((m) => (
                         <option key={m.id} value={m.id}>
-                          👤 {m.name}
+                          👤 {getMemberDisplayName(m)}
                         </option>
                       ))}
                   </select>
@@ -385,7 +387,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                         'pt-BR',
                         { hour: '2-digit', minute: '2-digit' }
                       );
-                      const respName = ev.responsible?.name || 'Cônjuge';
+                      const respName = getMemberDisplayName(ev.responsible) || 'Cônjuge';
                       return (
                         <div
                           key={ev.id}
@@ -483,7 +485,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                         backgroundColor: member.color,
                       }}
                       className="h-full transition-all duration-500"
-                      title={`${member.name}: ${percentage}%`}
+                      title={`${getMemberDisplayName(member)}: ${percentage}%`}
                     />
                   ))}
                   {unassignedCount > 0 && (
@@ -503,7 +505,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                         className="w-2.5 h-2.5 rounded-full"
                         style={{ backgroundColor: member.color }}
                       />
-                      <span className="text-slate-800 font-bold">{member.name}:</span>
+                      <span className="text-slate-800 font-bold">{getMemberDisplayName(member)}:</span>
                       <span className="text-slate-600">
                         {count} ({percentage}%)
                       </span>
@@ -577,7 +579,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                               className="w-2.5 h-2.5 rounded-full"
                               style={{ backgroundColor: child.color }}
                             />
-                            <span className="font-bold text-slate-900">{child.name}</span>
+                            <span className="font-bold text-slate-900">{getMemberDisplayName(child)}</span>
                           </div>
                           <span className="text-slate-600 font-semibold">
                             {count} atividade{count === 1 ? '' : 's'}

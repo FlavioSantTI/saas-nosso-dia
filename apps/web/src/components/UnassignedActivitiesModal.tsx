@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { EventItem, FamilyMember } from '../types';
+import { getMemberDisplayName } from '../lib/formatters';
 
 interface UnassignedActivitiesModalProps {
   isOpen: boolean;
@@ -179,7 +180,7 @@ export const UnassignedActivitiesModal: React.FC<UnassignedActivitiesModalProps>
                               className="w-2.5 h-2.5 rounded-full"
                               style={{ backgroundColor: member.color }}
                             />
-                            {member.name}
+                            {getMemberDisplayName(member)}
                           </button>
                         ))}
                       </div>
@@ -193,7 +194,7 @@ export const UnassignedActivitiesModal: React.FC<UnassignedActivitiesModalProps>
                         <span className="text-base">🔄</span>
                         <span>
                           Esta atividade faz parte de uma rotina. Deseja atribuir{' '}
-                          <strong className="text-indigo-700">{confirmingRoutine.selectedMember.name}</strong> para:
+                          <strong className="text-indigo-700">{getMemberDisplayName(confirmingRoutine.selectedMember)}</strong> para:
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">

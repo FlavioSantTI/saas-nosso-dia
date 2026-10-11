@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Family, FamilyMember } from '../types';
+import { getMemberDisplayName, getFirstName } from '../lib/formatters';
 import {
   Bot,
   Plus,
@@ -10,6 +11,7 @@ import {
   ChevronDown,
   Sun,
   MoreVertical,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -22,6 +24,7 @@ interface HeaderProps {
   currentMember?: FamilyMember | null;
   onOpenAuth: () => void;
   onLogout: () => Promise<void>;
+  onOpenAdmin?: () => void;
   hasActiveAlert?: boolean;
 }
 
@@ -35,8 +38,10 @@ export const Header: React.FC<HeaderProps> = ({
   currentMember,
   onOpenAuth,
   onLogout,
+  onOpenAdmin,
   hasActiveAlert = false,
 }) => {
+  const [logoError, setLogoError] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -57,22 +62,35 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const displayName =
+  const rawDisplayName =
     currentMember?.name ||
     currentUser?.user_metadata?.name ||
     currentUser?.email?.split('@')[0] ||
-    'Usuário';
+    'Família';
 
+  const firstName = currentMember
+    ? getMemberDisplayName(currentMember)
+    : getFirstName(rawDisplayName) || 'Família';
   const memberColor = currentMember?.color || '#0284C7';
+  const hasActiveSession = !!family || !!currentUser;
 
   return (
     <header className="bg-white/85 backdrop-blur-md border-b border-sky-100/80 sticky top-0 z-30 shadow-xs">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between">
         {/* Lado Esquerdo: Identidade da Família (Compacto no Mobile) */}
-        <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          <div className="bg-sky-100 text-sky-800 font-extrabold rounded-xl px-2.5 py-1 sm:px-3 sm:py-1.5 shadow-2xs text-sm sm:text-base tracking-tight flex items-center justify-center">
-            ND
-          </div>
+        <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
+          {!logoError ? (
+            <img
+              src="/icons/logo-round-1024.png"
+              alt="Logo Nosso Dia"
+              onError={() => setLogoError(true)}
+              className="w-10 h-10 rounded-full object-cover shadow-xs border border-sky-100 shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-sky-100 text-sky-800 font-extrabold flex items-center justify-center text-sm shadow-xs border border-sky-100 shrink-0">
+              ND
+            </div>
+          )}
           <div className="min-w-0">
             <h1 className="text-sm sm:text-lg font-bold tracking-tight text-slate-800 leading-tight truncate">
               Nosso Dia
@@ -132,85 +150,122 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Nova Atividade</span>
           </button>
 
-          {/* Seção de Autenticação / Perfil de Usuário */}
-          {currentUser ? (
-            <div className="relative ml-1" ref={userMenuRef}>
+          {/* Seção de Autenticação / Perfil de Usuário com Botão de Sair */}
+          {hasActiveSession ? (
+            <div className="flex items-center gap-1.5 ml-1">
+              {/* Menu com Nome e Avatar */}
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center gap-1.5 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
+                  title="Opções da Conta"
+                >
+                  <div
+                    className="w-6 h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-xs"
+                    style={{ backgroundColor: memberColor }}
+                  >
+                    {firstName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-xs font-bold text-slate-800 hidden sm:inline max-w-[100px] truncate">
+                    {firstName}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+
+                {/* Dropdown do Usuário Desktop */}
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="p-2.5 border-b border-slate-100">
+                      <p className="text-xs font-bold text-slate-900 truncate">
+                        {rawDisplayName}
+                      </p>
+                      {currentUser?.email ? (
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {currentUser.email}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {family.name}
+                        </p>
+                      )}
+                      {currentMember && (
+                        <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100">
+                          {currentMember.role === 'ADMIN'
+                            ? 'Adulto (Admin)'
+                            : 'Adulto (Membro)'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          onOpenSummary('today');
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2 cursor-pointer"
+                      >
+                        <Sun className="w-4 h-4 text-amber-500" />
+                        <span>Meu Dia Hoje</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          onOpenSummary('week');
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2 cursor-pointer"
+                      >
+                        <BarChart3 className="w-4 h-4 text-sky-600" />
+                        <span>Balanço da Semana</span>
+                      </button>
+                    </div>
+
+                    {onOpenAdmin && (
+                      <div className="py-1 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsUserMenuOpen(false);
+                            onOpenAdmin();
+                          }}
+                          className="w-full px-3 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                          <span>Painel Super-Admin</span>
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="pt-1 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsUserMenuOpen(false);
+                          await onLogout();
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Sair da Conta</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Botão de Ação Direta: [ 🚪 Sair ] */}
               <button
                 type="button"
-                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-1.5 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
+                onClick={onLogout}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100/80 border border-rose-200/70 transition-all shadow-2xs cursor-pointer"
+                title="Sair da Conta e Família"
               >
-                <div
-                  className="w-6 h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-xs"
-                  style={{ backgroundColor: memberColor }}
-                >
-                  {displayName.charAt(0).toUpperCase()}
-                </div>
-                <span className="text-xs font-bold text-slate-800 hidden sm:inline max-w-[100px] truncate">
-                  {displayName}
-                </span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                <span className="hidden md:inline">Sair</span>
               </button>
-
-              {/* Dropdown do Usuário Desktop */}
-              {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-                  <div className="p-2.5 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-900 truncate">
-                      {displayName}
-                    </p>
-                    <p className="text-[11px] text-slate-500 truncate">
-                      {currentUser.email}
-                    </p>
-                    {currentMember && (
-                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100">
-                        {currentMember.role === 'ADMIN'
-                          ? 'Adulto (Admin)'
-                          : 'Adulto (Membro)'}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="py-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        onOpenSummary('today');
-                      }}
-                      className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2 cursor-pointer"
-                    >
-                      <Sun className="w-4 h-4 text-amber-500" />
-                      <span>Meu Dia Hoje</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        onOpenSummary('week');
-                      }}
-                      className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2 cursor-pointer"
-                    >
-                      <BarChart3 className="w-4 h-4 text-sky-600" />
-                      <span>Balanço da Semana</span>
-                    </button>
-                  </div>
-
-                  <div className="pt-1 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setIsUserMenuOpen(false);
-                        await onLogout();
-                      }}
-                      className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Sair (Logout)</span>
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <button
@@ -240,7 +295,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span>IA</span>
             <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#059669]"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#059669]"></span>
             </span>
           </button>
 
@@ -268,22 +323,22 @@ export const Header: React.FC<HeaderProps> = ({
 
             {isMobileMenuOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-                {/* Se usuário estiver logado, exibe breve cabeçalho */}
-                {currentUser && (
+                {/* Se houver sessão ativa, exibe identificação limpa com primeiro nome */}
+                {hasActiveSession && (
                   <div className="p-2 border-b border-slate-100 mb-1">
                     <div className="flex items-center gap-2">
                       <div
                         className="w-5 h-5 rounded-md text-white font-bold text-[10px] flex items-center justify-center shrink-0"
                         style={{ backgroundColor: memberColor }}
                       >
-                        {displayName.charAt(0).toUpperCase()}
+                        {firstName.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-slate-900 truncate">
-                          {displayName}
+                          {firstName}
                         </p>
                         <p className="text-[10px] text-slate-500 truncate">
-                          {currentUser.email}
+                          {currentUser?.email || family.name}
                         </p>
                       </div>
                     </div>
@@ -326,10 +381,24 @@ export const Header: React.FC<HeaderProps> = ({
                     <Users className="w-4 h-4 text-slate-500" />
                     <span>Gerenciar Família</span>
                   </button>
+
+                  {onOpenAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onOpenAdmin();
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                      <span>Painel Super-Admin</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="pt-1 mt-1 border-t border-slate-100">
-                  {currentUser ? (
+                  {hasActiveSession ? (
                     <button
                       type="button"
                       onClick={async () => {
@@ -339,7 +408,7 @@ export const Header: React.FC<HeaderProps> = ({
                       className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
                     >
                       <LogOut className="w-4 h-4" />
-                      <span>Sair (Logout)</span>
+                      <span>Sair da Conta</span>
                     </button>
                   ) : (
                     <button

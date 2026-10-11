@@ -1,6 +1,7 @@
 import React from 'react';
 import { EventItem } from '../types';
 import { Clock, MapPin, User, Bell, AlertTriangle } from 'lucide-react';
+import { getMemberDisplayName } from '../lib/formatters';
 
 interface ActivityCardProps {
   event: EventItem;
@@ -79,7 +80,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
                 className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-semibold text-white shadow-2xs"
                 style={{ backgroundColor: p.color }}
               >
-                {p.name}
+                {getMemberDisplayName(p)}
               </span>
             ))}
           </div>
@@ -92,7 +93,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
         {event.responsible ? (
           <span className="font-semibold text-slate-700 flex items-center gap-1 text-[11px]">
             <User className="w-3 h-3 text-slate-500 shrink-0" />
-            <span>{event.responsible.name}</span>
+            <span>{getMemberDisplayName(event.responsible)}</span>
           </span>
         ) : (
           <span className="text-amber-800 font-bold bg-amber-100/80 px-1.5 py-0.5 rounded-md text-[10px] flex items-center gap-1 animate-pulse border border-amber-200/60">
@@ -106,7 +107,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
       {hasConflict && (
         <div className="mt-2 text-[11px] font-bold text-red-700 bg-red-100/90 border border-red-200 px-2 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
           <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-          <span>Conflito para {event.responsible?.name || 'responsável'}!</span>
+          <span>Conflito para {getMemberDisplayName(event.responsible) || 'responsável'}!</span>
         </div>
       )}
     </div>

@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.4.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.4.1-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,37 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.4.1] — 2026-10-11
+#### 🛡️ Módulo Super-Admin (`/admin`), Faturamento Asaas & Blindagem LGPD
+- **Painel Central Super-Admin (`AdminDashboard.tsx`):**
+  - **Acesso Seguro:** Protegido por verificação via RPC `is_super_admin()` e tabela `platform_admins` no Supabase com bloqueio e fallback elegante para usuários não autorizados.
+  - **Aba 1: Métricas Financeiras & MRR:**
+    - Cards de Total de Famílias (Tenants Ativos no Brasil), Assinantes Pagantes (Taxa de Conversão), MRR Estimado (R$) e Famílias em Degustação (Trial).
+  - **Aba 2: Gestão de Tenants (100% LGPD Compliant — Zero-Knowledge Architecture):**
+    - Tabela de metadados contábeis e de cobrança (Tenant ID, Nome da Família, E-mail do Responsável, Plano, Status e Vencimento).
+    - **Blindagem LGPD Máxima:** Rotinas, compromissos familiares, locais e dados de crianças são estritamente isolados e inacessíveis a administradores de infraestrutura.
+    - Ações diretas: `[ Trocar Plano ]`, `[ +14d Trial ]` e `[ Cancelar Assinatura ]`.
+  - **Aba 3: Catálogo Comercial de Planos:**
+    - Listagem de planos ativos (`Degustação`, `Família Essencial`, `Família Pro IA`, `Família Pro IA Anual`) com formulário para cadastro e edição de preços, ciclo e benefícios.
+- **Integração com o Gateway de Pagamentos Asaas (`asaas.ts`):**
+  - Contratos para criação de cliente (`createAsaasCustomer`) e assinaturas recorrentes (`createSubscription`) via **Pix Instantâneo (QR Code)** e **Cartão de Crédito Recorrente**.
+  - Parser de webhooks para conciliação bancária (`PAYMENT_RECEIVED`, `PAYMENT_OVERDUE`, `SUBSCRIPTION_CANCELED`).
+- **Aba "Plano & Assinatura" na Gestão Familiar (`FamilyManageModal.tsx`):**
+  - Exibição acolhedora do plano ativo com contagem regressiva do período de degustação.
+  - Seleção de planos e forma de pagamento com botão direto `[ 💳 Assinar Plano via Asaas (Pix / Cartão) ]`.
+
+#### 👤 Evolução Arquitetural de Domínio: Nickname e Nome Canônico
+- **Separação entre Nome Completo e Nome Familiar:**
+  - Adicionado campo opcional `nickname` na entidade `FamilyMember` e migration SQL de banco de dados (`20261011000001_add_nickname_to_family_members.sql`).
+  - Novos campos nos modais de cadastro e edição: *"Como é chamado(a) na casa? (Apelido ou Primeiro Nome)"*.
+- **Função Utilitária Canônica (`formatters.ts`):**
+  - Função `getMemberDisplayName(member)` aplicada universalmente no app (filtros, cards de atividade, briefing matinal, alertas de conflito e relatórios).
+- **Identidade Visual Oficial:**
+  - Substituição da cápsula textual "ND" pelo logotipo oficial redondo `/icons/logo-round-1024.png` com fallback resiliente.
+- **Rodapé Global:** Tag de versão atualizada para `v1.4.1`.
+
+---
 
 ### [v1.4.0] — 2026-10-10
 #### ☀️ Briefing Matinal & Relatório Diário (`DailyBriefingCard.tsx`)

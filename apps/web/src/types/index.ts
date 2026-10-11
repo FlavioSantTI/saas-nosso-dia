@@ -12,6 +12,7 @@ export interface FamilyMember {
   family_id: string;
   user_id?: string | null;
   name: string;
+  nickname?: string | null;
   role: MemberRole;
   color: string;
   birth_date?: string | null;
@@ -62,4 +63,37 @@ export interface WeekDayColumn {
   label: string; // 'Segunda', 'Terça'...
   formattedDate: string; // '07/10'
   events: EventItem[];
+}
+
+export interface Plan {
+  id: string;
+  name: string;
+  slug: string;
+  price_cents: number;
+  billing_interval: 'MONTHLY' | 'YEARLY';
+  max_members: number;
+  has_ai_access: boolean;
+  features: string[];
+  is_active: boolean;
+}
+
+export interface Subscription {
+  id: string;
+  family_id: string;
+  plan_id: string;
+  status: 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
+  current_period_end: string;
+  asaas_customer_id?: string | null;
+  asaas_subscription_id?: string | null;
+  plan?: Plan;
+}
+
+export interface TenantBillingInfo {
+  family_id: string;
+  family_name: string;
+  owner_email: string;
+  plan_name: string;
+  status: string;
+  created_at: string;
+  current_period_end: string;
 }
