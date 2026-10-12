@@ -20,6 +20,7 @@ import { startNotificationScheduler, requestNotificationPermission } from './lib
 import { getMemberDisplayName } from './lib/formatters';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { LandingPage } from './components/LandingPage';
+import { sanitizeTitle } from './lib/sanitize';
 
 const formatDateToYYYYMMDD = (d: Date): string => {
   const y = d.getFullYear();
@@ -985,7 +986,7 @@ export const App: React.FC = () => {
 
       // 3. Update na tabela events
       const eventUpdatePayload: any = {
-        title: updatedData.title,
+        title: sanitizeTitle(updatedData.title),
         start_time: start.toISOString(),
         end_time: end.toISOString(),
         location_id: locationId,
@@ -1224,6 +1225,8 @@ export const App: React.FC = () => {
         .map((d: any) => (typeof d === 'number' ? d : dayMap[String(d).toLowerCase().trim()]))
         .filter((d: any): d is number => d !== undefined && d >= 0 && d <= 6);
 
+      const cleanActivityTitle = sanitizeTitle(activity.title) || 'Atividade da Família';
+
       // 2. Grava a regra na tabela routines (se for recorrente)
       let routineId: string | null = null;
       if (isRecurring && routineDays.length > 0) {
@@ -1231,7 +1234,7 @@ export const App: React.FC = () => {
           .from('routines')
           .insert({
             family_id: family.id,
-            title: activity.title,
+            title: cleanActivityTitle,
             days_of_week: routineDays,
             start_time: activity.startTime,
             duration_minutes: activity.duration,
@@ -1249,7 +1252,7 @@ export const App: React.FC = () => {
             .from('routines')
             .select('id')
             .eq('family_id', family.id)
-            .ilike('title', activity.title)
+            .ilike('title', cleanActivityTitle)
             .maybeSingle();
           if (existing) {
             routineId = existing.id;
@@ -1265,7 +1268,7 @@ export const App: React.FC = () => {
           .from('routines')
           .select('id')
           .eq('family_id', family.id)
-          .ilike('title', activity.title)
+          .ilike('title', cleanActivityTitle)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -1315,7 +1318,7 @@ export const App: React.FC = () => {
         return {
           family_id: family.id,
           routine_id: routineId,
-          title: activity.title,
+          title: cleanActivityTitle,
           start_time: start.toISOString(),
           end_time: end.toISOString(),
           is_all_day: activity.is_all_day || false,

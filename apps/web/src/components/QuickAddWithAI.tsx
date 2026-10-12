@@ -21,6 +21,14 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
+import {
+  MAX_AI_PROMPT_LENGTH,
+  MAX_EVENT_TITLE_LENGTH,
+  MAX_LOCATION_NAME_LENGTH,
+  sanitizeInput,
+  sanitizeTitle,
+  validateTitle,
+} from '../lib/sanitize';
 
 interface QuickAddProps {
   isOpen: boolean;
@@ -215,8 +223,15 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   // -------------------------------------------------------------
   // Ações de Extração com Gemini
   // -------------------------------------------------------------
+  const sanitizeGeminiOutput = (raw: GeminiRoutineOutput): GeminiRoutineOutput => ({
+    ...raw,
+    title: sanitizeTitle(raw.title) || 'Atividade da Família',
+    location_name: sanitizeInput(raw.location_name, MAX_LOCATION_NAME_LENGTH),
+  });
+
   const handleExtractFromText = async () => {
-    if (!inputText.trim()) return;
+    const cleanPrompt = sanitizeInput(inputText, MAX_AI_PROMPT_LENGTH);
+    if (!cleanPrompt) return;
     setQuotaBlocked(null);
     setErrorMsg(null);
 
@@ -225,8 +240,8 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
 
     setIsParsing(true);
     try {
-      const data = await parseTextRoutine(inputText.trim());
-      setParsedResult(data);
+      const data = await parseTextRoutine(cleanPrompt);
+      setParsedResult(sanitizeGeminiOutput(data));
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || 'Falha ao processar texto com a IA.');
@@ -304,7 +319,7 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
         try {
           const base64 = reader.result as string;
           const data = await parseAudioRoutine(base64, blob.type || 'audio/webm');
-          setParsedResult(data);
+          setParsedResult(sanitizeGeminiOutput(data));
         } catch (err: any) {
           console.error(err);
           setErrorMsg(err.message || 'Falha ao interpretar áudio com o Gemini.');
@@ -342,7 +357,7 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
         try {
           const base64 = reader.result as string;
           const data = await parseMediaRoutine(base64, file.type);
-          setParsedResult(data);
+          setParsedResult(sanitizeGeminiOutput(data));
         } catch (err: any) {
           console.error(err);
           setErrorMsg(err.message || 'Falha ao interpretar documento com a IA.');
@@ -363,16 +378,25 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   const handleConfirmAndSave = () => {
     if (!parsedResult) return;
 
+    const cleanTitle = sanitizeTitle(parsedResult.title);
+    const validation = validateTitle(cleanTitle);
+    if (!validation.isValid) {
+      setErrorMsg(validation.error || 'Título da atividade inválido.');
+      return;
+    }
+
+    const cleanLocation = sanitizeInput(parsedResult.location_name, MAX_LOCATION_NAME_LENGTH);
+
     onConfirmAdd({
-      title: parsedResult.title,
+      title: cleanTitle,
       type: parsedResult.is_routine ? 'RECURRING' : 'SINGLE',
       startTime: parsedResult.start_time || '18:00',
       time: parsedResult.start_time || '18:00',
       duration: parsedResult.duration_minutes || 60,
       days: parsedResult.days_of_week || [],
       date_str: parsedResult.date_str,
-      location: parsedResult.location_name,
-      locationName: parsedResult.location_name,
+      location: cleanLocation,
+      locationName: cleanLocation,
       responsible: responsibleMember,
       participant: participantMember,
       participants: participantMember ? [participantMember] : [],
@@ -513,13 +537,27 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
               {/* ABA 1: TEXTO */}
               {activeTab === 'text' && (
                 <div className="space-y-3">
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Cole uma mensagem do WhatsApp ou digite o compromisso. O Gemini extrairá participantes, horários e rotinas automaticamente.
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Cole uma mensagem do WhatsApp ou digite o compromisso.
+                    </p>
+                    <span
+                      className={`text-[11px] font-semibold transition-colors ${
+                        inputText.length >= MAX_AI_PROMPT_LENGTH
+                          ? 'text-rose-600 font-bold'
+                          : inputText.length >= 800
+                          ? 'text-amber-600'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {inputText.length}/{MAX_AI_PROMPT_LENGTH}
+                    </span>
+                  </div>
                   <textarea
                     rows={4}
+                    maxLength={MAX_AI_PROMPT_LENGTH}
                     value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
+                    onChange={(e) => setInputText(e.target.value.slice(0, MAX_AI_PROMPT_LENGTH))}
                     placeholder="Ex: Rafael tem aula de natação terça e quinta às 18h no clube, a Silvia leva."
                     className="w-full text-xs font-medium p-3.5 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 focus:outline-none transition-all resize-none"
                     disabled={isParsing}
@@ -668,11 +706,35 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
                   </span>
                 </div>
 
-                {/* Título da Atividade */}
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 leading-tight">
-                    {parsedResult.title}
-                  </h3>
+                {/* Título da Atividade com Ajuste Fino e Contador */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                      Título da Atividade
+                    </label>
+                    <span
+                      className={`text-[10px] font-semibold transition-colors ${
+                        (parsedResult.title || '').length >= MAX_EVENT_TITLE_LENGTH
+                          ? 'text-rose-600 font-bold'
+                          : (parsedResult.title || '').length >= 80
+                          ? 'text-amber-600'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {(parsedResult.title || '').length}/{MAX_EVENT_TITLE_LENGTH}
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={MAX_EVENT_TITLE_LENGTH}
+                    value={parsedResult.title}
+                    onChange={(e) => {
+                      const updated = e.target.value.slice(0, MAX_EVENT_TITLE_LENGTH);
+                      setParsedResult((prev) => (prev ? { ...prev, title: updated } : null));
+                    }}
+                    placeholder="Nome da atividade..."
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-sm font-bold text-slate-900 transition-all bg-white"
+                  />
                 </div>
 
                 {/* Membros Identificados com Badges Coloridos */}

@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { EventItem, FamilyMember } from '../types';
 import { requestNotificationPermission } from '../lib/notifications';
 import { supabase } from '../lib/supabase';
+import {
+  MAX_EVENT_TITLE_LENGTH,
+  MAX_LOCATION_NAME_LENGTH,
+  sanitizeInput,
+  sanitizeTitle,
+  validateTitle,
+} from '../lib/sanitize';
 
 interface EditActivityModalProps {
   isOpen: boolean;
@@ -57,12 +64,14 @@ export const EditActivityModal: React.FC<EditActivityModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [titleError, setTitleError] = useState<string | null>(null);
 
   useEffect(() => {
     if (event) {
       console.log("DEBUG EVENTO MODAL:", { id: event.id, title: event.title, routine_id: event.routine_id });
       setTitle(event.title || '');
       setShowDeleteConfirm(false);
+      setTitleError(null);
       
       const start = new Date(event.start_time);
       const end = new Date(event.end_time);
@@ -111,24 +120,31 @@ export const EditActivityModal: React.FC<EditActivityModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    const cleanTitle = sanitizeTitle(title);
+    const validation = validateTitle(cleanTitle);
+    if (!validation.isValid) {
+      setTitleError(validation.error || 'Título inválido');
+      return;
+    }
 
     requestNotificationPermission();
 
     try {
       setIsSaving(true);
+      setTitleError(null);
       const responsible = members.find(m => m.id === responsibleId) || null;
       const participants = members.filter(m => selectedParticipantIds.includes(m.id));
+      const cleanLocation = sanitizeInput(locationName, MAX_LOCATION_NAME_LENGTH);
 
       await onSave({
         id: event.id,
-        title: title.trim(),
+        title: cleanTitle,
         dateStr,
         startTime: isAllDay ? '00:00' : startTime,
         duration: isAllDay ? 1440 : (parseInt(duration, 10) || 60),
         responsible,
         participants,
-        location: locationName.trim(),
+        location: cleanLocation,
         reminder_minutes: reminderMinutes,
         is_all_day: isAllDay
       });
@@ -202,17 +218,43 @@ export const EditActivityModal: React.FC<EditActivityModalProps> = ({
 
         {/* Formulário */}
         <form onSubmit={handleSave} className="p-6 overflow-y-auto flex-1 flex flex-col gap-4.5 text-slate-800">
-          {/* Título */}
+          {/* Título com Contador Visual e maxLength */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-600">Título da Atividade</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                Título da Atividade *
+              </label>
+              <span
+                className={`text-[11px] font-semibold transition-colors ${
+                  title.length >= MAX_EVENT_TITLE_LENGTH
+                    ? 'text-rose-600 font-bold'
+                    : title.length >= 80
+                    ? 'text-amber-600'
+                    : 'text-slate-400'
+                }`}
+              >
+                {title.length}/{MAX_EVENT_TITLE_LENGTH}
+              </span>
+            </div>
             <input
               type="text"
+              maxLength={MAX_EVENT_TITLE_LENGTH}
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value.slice(0, MAX_EVENT_TITLE_LENGTH));
+                if (titleError) setTitleError(null);
+              }}
               placeholder="Ex: Natação, Inglês, Consulta..."
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-sm font-semibold transition-all"
+              className={`w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 text-sm font-semibold transition-all ${
+                titleError
+                  ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-500'
+                  : 'border-slate-200 focus:ring-sky-500/20 focus:border-sky-500'
+              }`}
               required
             />
+            {titleError && (
+              <span className="text-[11px] font-semibold text-rose-600">{titleError}</span>
+            )}
           </div>
 
           {/* Data do Evento */}
@@ -313,11 +355,17 @@ export const EditActivityModal: React.FC<EditActivityModalProps> = ({
 
           {/* Local */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-600">Local</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600">Local</label>
+              <span className="text-[11px] font-semibold text-slate-400">
+                {locationName.length}/{MAX_LOCATION_NAME_LENGTH}
+              </span>
+            </div>
             <input
               type="text"
+              maxLength={MAX_LOCATION_NAME_LENGTH}
               value={locationName}
-              onChange={(e) => setLocationName(e.target.value)}
+              onChange={(e) => setLocationName(e.target.value.slice(0, MAX_LOCATION_NAME_LENGTH))}
               placeholder="Ex: Escola, Clube, Consultório..."
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-sm font-semibold transition-all"
             />

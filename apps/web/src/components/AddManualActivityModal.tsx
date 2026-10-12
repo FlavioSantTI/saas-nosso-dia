@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { FamilyMember } from '../types';
 import { requestNotificationPermission } from '../lib/notifications';
+import {
+  MAX_EVENT_TITLE_LENGTH,
+  MAX_LOCATION_NAME_LENGTH,
+  sanitizeInput,
+  sanitizeTitle,
+  validateTitle,
+} from '../lib/sanitize';
 
 interface AddManualActivityModalProps {
   isOpen: boolean;
@@ -27,6 +34,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(15);
   const [endDate, setEndDate] = useState(''); // data final opcional para rotinas
   const [isSaving, setIsSaving] = useState(false);
+  const [titleError, setTitleError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -62,16 +70,27 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
 
   const handleSave = async () => {
     if (isSaving) return;
+
+    // Sanitização e validação defensiva antes de enviar ao Supabase
+    const cleanTitle = sanitizeTitle(title);
+    const validation = validateTitle(cleanTitle);
+    if (!validation.isValid) {
+      setTitleError(validation.error || 'Título inválido');
+      return;
+    }
+
     try {
       setIsSaving(true);
+      setTitleError(null);
       // Verifica permissão de notificação ao salvar
       requestNotificationPermission();
 
       const responsible = members.find(m => m.id === responsibleId) || null;
       const participants = members.filter(m => selectedParticipants.includes(m.id));
+      const cleanLocation = sanitizeInput(location, MAX_LOCATION_NAME_LENGTH);
       
       await onSave({
-        title,
+        title: cleanTitle,
         type,
         days,
         is_all_day: isAllDay,
@@ -79,7 +98,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
         duration: isAllDay ? 1440 : parseInt(duration, 10),
         participants,
         responsible,
-        location,
+        location: cleanLocation,
         reminder_minutes: reminderMinutes,
         end_date: endDate || null
       });
@@ -96,6 +115,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
       setLocation('');
       setReminderMinutes(15);
       setEndDate('');
+      setTitleError(null);
     } catch (err) {
       console.error('Erro ao salvar atividade:', err);
     } finally {
@@ -120,16 +140,42 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-4.5 text-slate-800">
-          {/* Título */}
+          {/* Título com Contador Visual e maxLength */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-600">Título da atividade</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                Título da atividade *
+              </label>
+              <span
+                className={`text-[11px] font-semibold transition-colors ${
+                  title.length >= MAX_EVENT_TITLE_LENGTH
+                    ? 'text-rose-600 font-bold'
+                    : title.length >= 80
+                    ? 'text-amber-600'
+                    : 'text-slate-400'
+                }`}
+              >
+                {title.length}/{MAX_EVENT_TITLE_LENGTH}
+              </span>
+            </div>
             <input 
               type="text" 
+              maxLength={MAX_EVENT_TITLE_LENGTH}
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value.slice(0, MAX_EVENT_TITLE_LENGTH));
+                if (titleError) setTitleError(null);
+              }}
               placeholder="Ex: Aula de Natação, Inglês, Terapia..."
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-sm font-semibold transition-all"
+              className={`w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 text-sm font-semibold transition-all ${
+                titleError
+                  ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-500'
+                  : 'border-slate-200 focus:ring-sky-500/20 focus:border-sky-500'
+              }`}
             />
+            {titleError && (
+              <span className="text-[11px] font-semibold text-rose-600">{titleError}</span>
+            )}
           </div>
 
           {/* Tipo */}
@@ -270,11 +316,17 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
 
           {/* Local */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-600">Local</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600">Local</label>
+              <span className="text-[11px] font-semibold text-slate-400">
+                {location.length}/{MAX_LOCATION_NAME_LENGTH}
+              </span>
+            </div>
             <input 
               type="text" 
+              maxLength={MAX_LOCATION_NAME_LENGTH}
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
+              onChange={(e) => setLocation(e.target.value.slice(0, MAX_LOCATION_NAME_LENGTH))}
               placeholder="Ex: Escola, Clube, Casa..."
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-sm font-semibold transition-all"
             />
