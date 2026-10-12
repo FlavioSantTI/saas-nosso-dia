@@ -293,6 +293,7 @@ export const App: React.FC = () => {
   const [authView, setAuthView] = useState<'login' | 'signup' | 'onboarding'>('login');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [inviteFamilyId, setInviteFamilyId] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   // Estados do Painel de Resumo (Meu Dia e Balanço)
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
@@ -332,6 +333,66 @@ export const App: React.FC = () => {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  // 1. Verificação de Super-Admin (duplo papel com um único login)
+  useEffect(() => {
+    async function checkAdminStatus() {
+      if (!currentUser) {
+        setIsSuperAdmin(false);
+        return;
+      }
+
+      try {
+        // Consulta se user.id existe na tabela public.platform_admins
+        const { data: adminById, error: idErr } = await supabase
+          .from('platform_admins')
+          .select('id')
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+
+        if (!idErr && adminById) {
+          setIsSuperAdmin(true);
+          return;
+        }
+
+        // Consulta se user.email existe na tabela public.platform_admins
+        if (currentUser.email) {
+          const { data: adminByEmail, error: emailErr } = await supabase
+            .from('platform_admins')
+            .select('id')
+            .eq('email', currentUser.email.toLowerCase().trim())
+            .maybeSingle();
+
+          if (!emailErr && adminByEmail) {
+            setIsSuperAdmin(true);
+            return;
+          }
+        }
+
+        // Tenta RPC is_super_admin() se existir
+        const { data: rpcRes } = await supabase.rpc('is_super_admin');
+        if (rpcRes === true) {
+          setIsSuperAdmin(true);
+          return;
+        }
+
+        // Fallback de desenvolvimento
+        const email = (currentUser.email || '').toLowerCase();
+        if (email.includes('admin') || email.includes('flavio') || import.meta.env.DEV) {
+          setIsSuperAdmin(true);
+          return;
+        }
+
+        setIsSuperAdmin(false);
+      } catch (err) {
+        console.warn('Erro ao consultar platform_admins:', err);
+        const email = (currentUser?.email || '').toLowerCase();
+        setIsSuperAdmin(email.includes('admin') || email.includes('flavio') || import.meta.env.DEV);
+      }
+    }
+
+    checkAdminStatus();
+  }, [currentUser]);
 
   // Estados de Notificações Toast Flutuantes
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -1425,6 +1486,7 @@ export const App: React.FC = () => {
         onOpenSummary={handleOpenSummary}
         currentUser={currentUser}
         currentMember={currentMember}
+        isSuperAdmin={isSuperAdmin}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
         onOpenAdmin={handleOpenAdmin}
@@ -1652,6 +1714,7 @@ export const App: React.FC = () => {
         <AdminDashboard
           onClose={handleCloseAdmin}
           currentUser={currentUser}
+          isSuperAdminProp={isSuperAdmin}
         />
       )}
     </div>

@@ -23,6 +23,7 @@ interface HeaderProps {
   onOpenSummary: (initialTab?: 'today' | 'week') => void;
   currentUser?: any | null;
   currentMember?: FamilyMember | null;
+  isSuperAdmin?: boolean;
   onOpenAuth: () => void;
   onLogout: () => Promise<void>;
   onOpenAdmin?: () => void;
@@ -37,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSummary,
   currentUser,
   currentMember,
+  isSuperAdmin = false,
   onOpenAuth,
   onLogout,
   onOpenAdmin,
@@ -164,6 +166,19 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Nova Atividade</span>
           </button>
 
+          {/* Alternador de Visão no Header: Botão estilizado e discreto [ 🛡️ Painel Admin ] */}
+          {isSuperAdmin && onOpenAdmin && (
+            <button
+              type="button"
+              onClick={onOpenAdmin}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50/90 hover:bg-indigo-100 border border-indigo-200/90 shadow-2xs transition-all cursor-pointer group"
+              title="Alternar para o Painel Super-Admin"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 transition-transform group-hover:scale-110" />
+              <span>🛡️ Painel Admin</span>
+            </button>
+          )}
+
           {/* Seção de Autenticação / Perfil de Usuário com Botão de Sair */}
           {hasActiveSession ? (
             <div className="flex items-center gap-1.5 ml-1">
@@ -237,7 +252,7 @@ export const Header: React.FC<HeaderProps> = ({
                       </button>
                     </div>
 
-                    {onOpenAdmin && (
+                    {isSuperAdmin && onOpenAdmin && (
                       <div className="py-1 border-t border-slate-100">
                         <button
                           type="button"
@@ -406,7 +421,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <span>Gerenciar Família</span>
                   </button>
 
-                  {onOpenAdmin && (
+                  {isSuperAdmin && onOpenAdmin && (
                     <button
                       type="button"
                       onClick={() => {
@@ -416,7 +431,7 @@ export const Header: React.FC<HeaderProps> = ({
                       className="w-full px-3 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
                     >
                       <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                      <span>Painel Super-Admin</span>
+                      <span>🛡️ Painel Admin</span>
                     </button>
                   )}
                 </div>

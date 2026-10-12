@@ -21,6 +21,7 @@ import {
 interface AdminDashboardProps {
   onClose: () => void;
   currentUser: any;
+  isSuperAdminProp?: boolean;
 }
 
 const DEFAULT_PLANS: Plan[] = [
@@ -70,10 +71,14 @@ const DEFAULT_PLANS: Plan[] = [
   },
 ];
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, currentUser }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  onClose,
+  currentUser,
+  isSuperAdminProp,
+}) => {
   const [activeTab, setActiveTab] = useState<'metrics' | 'tenants' | 'plans'>('metrics');
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(isSuperAdminProp ?? false);
 
   // Dados de Tenants e Cobrança
   const [tenants, setTenants] = useState<TenantBillingInfo[]>([]);
@@ -104,6 +109,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, current
   useEffect(() => {
     async function checkPermission() {
       setIsLoadingAuth(true);
+
+      if (isSuperAdminProp === true) {
+        setIsSuperAdmin(true);
+        setIsLoadingAuth(false);
+        return;
+      }
+
       if (!currentUser) {
         setIsSuperAdmin(false);
         setIsLoadingAuth(false);
@@ -111,15 +123,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, current
       }
 
       try {
-        // Tenta RPC is_super_admin()
-        const { data: rpcResult, error: rpcErr } = await supabase.rpc('is_super_admin');
-        if (!rpcErr && rpcResult === true) {
-          setIsSuperAdmin(true);
-          setIsLoadingAuth(false);
-          return;
-        }
-
-        // Tenta consulta direta na tabela platform_admins
+        // Tenta consulta por user_id na tabela platform_admins
         const { data: adminRows, error: queryErr } = await supabase
           .from('platform_admins')
           .select('id')
@@ -127,6 +131,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, current
           .maybeSingle();
 
         if (!queryErr && adminRows) {
+          setIsSuperAdmin(true);
+          setIsLoadingAuth(false);
+          return;
+        }
+
+        // Tenta consulta por e-mail na tabela platform_admins
+        if (currentUser.email) {
+          const { data: adminByEmail, error: emailErr } = await supabase
+            .from('platform_admins')
+            .select('id')
+            .eq('email', currentUser.email.toLowerCase().trim())
+            .maybeSingle();
+
+          if (!emailErr && adminByEmail) {
+            setIsSuperAdmin(true);
+            setIsLoadingAuth(false);
+            return;
+          }
+        }
+
+        // Tenta RPC is_super_admin()
+        const { data: rpcResult, error: rpcErr } = await supabase.rpc('is_super_admin');
+        if (!rpcErr && rpcResult === true) {
           setIsSuperAdmin(true);
           setIsLoadingAuth(false);
           return;
@@ -151,7 +178,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, current
     }
 
     checkPermission();
-  }, [currentUser]);
+  }, [currentUser, isSuperAdminProp]);
 
   // 2. Carrega Dados de Tenants e Planos (com 100% blindagem LGPD)
   const loadAdminData = async () => {
@@ -435,11 +462,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, current
             <ShieldAlert className="w-8 h-8" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">
-              Acesso Restrito ao Super-Admin
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-snug">
+              Acesso Negado: esta área é restrita à administração da plataforma
             </h2>
             <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-              O módulo <strong>/admin</strong> é reservado exclusivamente aos administradores da plataforma Nosso Dia para monitoramento de métricas e faturamento.
+              O módulo <strong>/admin</strong> é reservado exclusivamente aos administradores cadastrados na plataforma Nosso Dia para monitoramento de métricas e faturamento.
             </p>
           </div>
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 font-mono">
@@ -451,7 +478,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, current
             className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Voltar ao App Nosso Dia</span>
+            <span>Voltar para Minha Família</span>
           </button>
         </div>
       </div>
@@ -496,10 +523,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, current
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
+              title="Retornar à rotina da família"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Voltar ao App</span>
+              <span>🏠 Voltar para Minha Família</span>
             </button>
           </div>
         </div>
