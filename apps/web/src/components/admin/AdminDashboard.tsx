@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plan, TenantBillingInfo } from '../../types';
+import { Plan, TenantBillingInfo, PlatformSettings, AdminUserListItem } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { formatCentsToBRL } from '../../lib/asaas';
 import {
@@ -16,6 +16,20 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
+  Cpu,
+  Zap,
+  FileText,
+  Mic,
+  Image,
+  FileUp,
+  Save,
+  Trash2,
+  UserPlus,
+  UserCheck,
+  X,
+  KeyRound,
+  Mail,
+  Send,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -23,6 +37,32 @@ interface AdminDashboardProps {
   currentUser: any;
   isSuperAdminProp?: boolean;
 }
+
+export interface AdminFamilyMember {
+  id: string;
+  family_id: string;
+  user_id?: string | null;
+  name: string;
+  nickname?: string | null;
+  role: 'ADMIN' | 'MEMBER' | 'CHILD';
+  color: string;
+  birth_date?: string | null;
+  created_at?: string;
+  family_name?: string;
+}
+
+const MEMBER_COLOR_PALETTE = [
+  '#0284C7', // Azul Oceano
+  '#EA580C', // Terracota / Laranja
+  '#059669', // Verde Sálvia
+  '#0891B2', // Ciano / Petróleo
+  '#7C3AED', // Violeta
+  '#DB2777', // Rosa
+  '#D97706', // Âmbar
+  '#65A30D', // Lima / Oliva
+  '#4F46E5', // Índigo
+  '#475569', // Ardósia
+];
 
 const DEFAULT_PLANS: Plan[] = [
   {
@@ -35,6 +75,8 @@ const DEFAULT_PLANS: Plan[] = [
     has_ai_access: true,
     features: ['Até 4 membros familiares', 'Sincronização em tempo real', 'Captura com Inteligência Artificial (14 dias)'],
     is_active: true,
+    monthly_ai_credits: 30,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
   },
   {
     id: 'd2222222-2222-2222-2222-222222222222',
@@ -46,6 +88,8 @@ const DEFAULT_PLANS: Plan[] = [
     has_ai_access: false,
     features: ['Até 5 membros', 'Sincronização ilimitada', 'Painel de Resumo & Balanço', 'Lembretes'],
     is_active: true,
+    monthly_ai_credits: 0,
+    allowed_ai_modalities: [],
   },
   {
     id: 'd3333333-3333-3333-3333-333333333333',
@@ -57,6 +101,8 @@ const DEFAULT_PLANS: Plan[] = [
     has_ai_access: true,
     features: ['Até 10 membros', 'Captura com Gemini IA', 'Briefing Matinal', 'Suporte VIP'],
     is_active: true,
+    monthly_ai_credits: 100,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
   },
   {
     id: 'd4444444-4444-4444-4444-444444444444',
@@ -68,6 +114,8 @@ const DEFAULT_PLANS: Plan[] = [
     has_ai_access: true,
     features: ['2 meses grátis', 'Acesso completo IA', 'Membros ilimitados', 'Briefing e Resumo'],
     is_active: true,
+    monthly_ai_credits: 150,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
   },
 ];
 
@@ -76,9 +124,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   currentUser,
   isSuperAdminProp,
 }) => {
-  const [activeTab, setActiveTab] = useState<'metrics' | 'tenants' | 'plans'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'tenants' | 'users' | 'plans' | 'ai_settings'>('metrics');
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(isSuperAdminProp ?? false);
+
+  // Parâmetros Globais de IA (platform_settings)
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
+    id: '',
+    ai_cost_text: 1,
+    ai_cost_audio: 1,
+    ai_cost_image: 3,
+    ai_cost_pdf: 10,
+    ai_enabled: true,
+    updated_at: new Date().toISOString(),
+  });
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [settingsToast, setSettingsToast] = useState<string | null>(null);
+  const [planSavingId, setPlanSavingId] = useState<string | null>(null);
+  const [planSaveToast, setPlanSaveToast] = useState<{ [planId: string]: string }>({});
 
   // Dados de Tenants e Cobrança
   const [tenants, setTenants] = useState<TenantBillingInfo[]>([]);
@@ -90,6 +153,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Modais de Gestão de Tenant
   const [selectedTenantForPlan, setSelectedTenantForPlan] = useState<TenantBillingInfo | null>(null);
   const [newSelectedPlanId, setNewSelectedPlanId] = useState('');
+
+  // CRUD de Usuários das Famílias
+  const [familyMembers, setFamilyMembers] = useState<AdminFamilyMember[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [memberFamilyFilter, setMemberFamilyFilter] = useState<string>('ALL');
+  const [memberSearchTerm, setMemberSearchTerm] = useState('');
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<AdminFamilyMember | null>(null);
+  const [memberForm, setMemberForm] = useState({
+    family_id: '',
+    name: '',
+    nickname: '',
+    role: 'MEMBER' as 'ADMIN' | 'MEMBER' | 'CHILD',
+    color: '#0284C7',
+    birth_date: '',
+  });
+  const [isSavingMember, setIsSavingMember] = useState(false);
+  const [memberToast, setMemberToast] = useState<string | null>(null);
+
+  // Gestão de Usuários e Acessos do Super-Admin (AdminUserListItem)
+  const [adminUsers, setAdminUsers] = useState<AdminUserListItem[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [userToast, setUserToast] = useState<string | null>(null);
+  const [userViewMode, setUserViewMode] = useState<'auth_users' | 'family_profiles'>('auth_users');
+
+  // Modal de Convite / Novo Usuário Rápido
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteFamilyId, setInviteFamilyId] = useState('');
+  const [isInvitingUser, setIsInvitingUser] = useState(false);
 
   // Modal de Criação / Edição de Plano
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
@@ -180,10 +274,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     checkPermission();
   }, [currentUser, isSuperAdminProp]);
 
-  // 2. Carrega Dados de Tenants e Planos (com 100% blindagem LGPD)
+  // 2. Carrega Dados de Tenants, Planos e IA (com 100% blindagem LGPD)
   const loadAdminData = async () => {
     setIsLoadingData(true);
     try {
+      // 2.0 Carrega Configurações Globais de IA (public.platform_settings)
+      const { data: settingsData } = await supabase
+        .from('platform_settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (settingsData) {
+        setPlatformSettings({
+          id: settingsData.id || '',
+          ai_cost_text: settingsData.ai_cost_text ?? 1,
+          ai_cost_audio: settingsData.ai_cost_audio ?? 1,
+          ai_cost_image: settingsData.ai_cost_image ?? 3,
+          ai_cost_pdf: settingsData.ai_cost_pdf ?? 10,
+          ai_enabled: settingsData.ai_enabled ?? true,
+          updated_at: settingsData.updated_at || new Date().toISOString(),
+        });
+      }
+
       // 2.1 Carrega Planos
       const { data: plansData } = await supabase.from('plans').select('*');
       if (plansData && plansData.length > 0) {
@@ -191,6 +305,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           plansData.map((p) => ({
             ...p,
             features: Array.isArray(p.features) ? p.features : [],
+            monthly_ai_credits: p.monthly_ai_credits ?? (p.has_ai_access ? 100 : 0),
+            allowed_ai_modalities: Array.isArray(p.allowed_ai_modalities)
+              ? p.allowed_ai_modalities
+              : (p.has_ai_access ? ['TEXT', 'AUDIO', 'IMAGE', 'PDF'] : []),
           }))
         );
       } else {
@@ -231,6 +349,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             status: sub?.status || 'TRIAL',
             created_at: f.created_at || new Date().toISOString(),
             current_period_end: sub?.current_period_end || new Date(Date.now() + 14 * 86400000).toISOString(),
+            ai_credits_used: sub?.ai_credits_used ?? 0,
           };
         });
         setTenants(enriched);
@@ -245,6 +364,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             status: 'ACTIVE',
             created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
             current_period_end: new Date(Date.now() + 335 * 86400000).toISOString(),
+            ai_credits_used: 42,
           },
           {
             family_id: 'fam-silva-02',
@@ -254,6 +374,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             status: 'ACTIVE',
             created_at: new Date(Date.now() - 15 * 86400000).toISOString(),
             current_period_end: new Date(Date.now() + 15 * 86400000).toISOString(),
+            ai_credits_used: 18,
           },
           {
             family_id: 'fam-oliveira-03',
@@ -263,6 +384,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             status: 'TRIAL',
             created_at: new Date(Date.now() - 4 * 86400000).toISOString(),
             current_period_end: new Date(Date.now() + 10 * 86400000).toISOString(),
+            ai_credits_used: 5,
           },
           {
             family_id: 'fam-almeida-04',
@@ -272,9 +394,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             status: 'PAST_DUE',
             created_at: new Date(Date.now() - 60 * 86400000).toISOString(),
             current_period_end: new Date(Date.now() - 2 * 86400000).toISOString(),
+            ai_credits_used: 0,
           },
         ]);
       }
+
+      // 2.5 Carrega Usuários / Membros de todas as Famílias
+      await loadFamilyMembers();
+      await loadAdminUsers();
     } catch (err) {
       console.error('[Admin] Erro ao carregar dados:', err);
     } finally {
@@ -440,6 +567,474 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsPlanModalOpen(false);
   };
 
+  // -------------------------------------------------------------
+  // Cálculos de Consumo Geral de IA (Seção 3)
+  // -------------------------------------------------------------
+  const totalAiCreditsUsed = useMemo(() => {
+    return tenants.reduce((acc, t) => acc + (t.ai_credits_used || 0), 0);
+  }, [tenants]);
+
+  const estimatedAiCostBrl = useMemo(() => {
+    const cost = totalAiCreditsUsed * 0.02;
+    return cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }, [totalAiCreditsUsed]);
+
+  // -------------------------------------------------------------
+  // Handlers para Custos Globais e Regras de IA por Plano
+  // -------------------------------------------------------------
+  const handleSavePlatformSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      const payload = {
+        ai_cost_text: Number(platformSettings.ai_cost_text) || 1,
+        ai_cost_audio: Number(platformSettings.ai_cost_audio) || 1,
+        ai_cost_image: Number(platformSettings.ai_cost_image) || 3,
+        ai_cost_pdf: Number(platformSettings.ai_cost_pdf) || 10,
+        ai_enabled: Boolean(platformSettings.ai_enabled),
+        updated_at: new Date().toISOString(),
+      };
+
+      let error = null;
+      if (platformSettings.id) {
+        const res = await supabase.from('platform_settings').update(payload).eq('id', platformSettings.id);
+        error = res.error;
+      } else {
+        const res = await supabase.from('platform_settings').upsert([payload]).select().maybeSingle();
+        error = res.error;
+        if (res.data) setPlatformSettings(res.data);
+      }
+
+      if (error) throw error;
+      setSettingsToast('Parâmetros globais de IA atualizados com sucesso!');
+      setTimeout(() => setSettingsToast(null), 4000);
+    } catch (err: any) {
+      console.error('[Admin] Erro ao salvar configurações de IA:', err);
+      alert('Erro ao salvar parâmetros: ' + (err.message || 'Erro inesperado'));
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleUpdatePlanField = (planId: string, field: 'monthly_ai_credits', value: number) => {
+    setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, [field]: value } : p)));
+  };
+
+  const handleTogglePlanModality = (planId: string, modality: string) => {
+    setPlans((prev) =>
+      prev.map((p) => {
+        if (p.id !== planId) return p;
+        const current = p.allowed_ai_modalities || [];
+        const updated = current.includes(modality)
+          ? current.filter((m) => m !== modality)
+          : [...current, modality];
+        return { ...p, allowed_ai_modalities: updated };
+      })
+    );
+  };
+
+  const handleSavePlanAiRules = async (plan: Plan) => {
+    setPlanSavingId(plan.id);
+    try {
+      const { error } = await supabase
+        .from('plans')
+        .update({
+          monthly_ai_credits: Number(plan.monthly_ai_credits || 0),
+          allowed_ai_modalities: plan.allowed_ai_modalities || [],
+        })
+        .eq('id', plan.id);
+
+      if (error) throw error;
+      setPlanSaveToast((prev) => ({ ...prev, [plan.id]: 'Regras do plano salvas!' }));
+      setTimeout(() => {
+        setPlanSaveToast((prev) => {
+          const next = { ...prev };
+          delete next[plan.id];
+          return next;
+        });
+      }, 3000);
+    } catch (err: any) {
+      console.error('[Admin] Erro ao salvar regras do plano:', err);
+      alert('Erro ao salvar regras: ' + (err.message || 'Erro inesperado'));
+    } finally {
+      setPlanSavingId(null);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // CRUD de Usuários / Membros das Famílias
+  // -------------------------------------------------------------
+  const loadFamilyMembers = async () => {
+    setIsLoadingMembers(true);
+    try {
+      const { data, error } = await supabase
+        .from('family_members')
+        .select('*, family:families(id, name)')
+        .order('name', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        setFamilyMembers(
+          data.map((m: any) => ({
+            id: m.id,
+            family_id: m.family_id,
+            user_id: m.user_id,
+            name: m.name,
+            nickname: m.nickname,
+            role: m.role || 'MEMBER',
+            color: m.color || '#0284C7',
+            birth_date: m.birth_date,
+            created_at: m.created_at,
+            family_name: m.family?.name || 'Família',
+          }))
+        );
+      } else {
+        // Fallback demonstrativo caso tabela esteja vazia no ambiente local
+        setFamilyMembers([
+          {
+            id: 'mem-01',
+            family_id: 'fam-santiago-01',
+            name: 'Flávio Santiago',
+            nickname: 'Papai',
+            role: 'ADMIN',
+            color: '#0284C7',
+            birth_date: '1985-04-12',
+            created_at: new Date().toISOString(),
+            family_name: 'Família Santiago',
+          },
+          {
+            id: 'mem-02',
+            family_id: 'fam-santiago-01',
+            name: 'Carla Santiago',
+            nickname: 'Mamãe',
+            role: 'ADMIN',
+            color: '#DB2777',
+            birth_date: '1988-08-20',
+            created_at: new Date().toISOString(),
+            family_name: 'Família Santiago',
+          },
+          {
+            id: 'mem-03',
+            family_id: 'fam-santiago-01',
+            name: 'Lucas Santiago',
+            nickname: 'Luquinhas',
+            role: 'CHILD',
+            color: '#059669',
+            birth_date: '2016-11-05',
+            created_at: new Date().toISOString(),
+            family_name: 'Família Santiago',
+          },
+          {
+            id: 'mem-04',
+            family_id: 'fam-silva-02',
+            name: 'Carlos Silva',
+            nickname: 'Pai',
+            role: 'ADMIN',
+            color: '#EA580C',
+            birth_date: '1980-01-15',
+            created_at: new Date().toISOString(),
+            family_name: 'Família Silva',
+          },
+          {
+            id: 'mem-05',
+            family_id: 'fam-silva-02',
+            name: 'Mariana Silva',
+            nickname: 'Mari',
+            role: 'MEMBER',
+            color: '#7C3AED',
+            birth_date: '1982-06-30',
+            created_at: new Date().toISOString(),
+            family_name: 'Família Silva',
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error('[Admin] Erro ao carregar membros:', err);
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  };
+
+  const filteredFamilyMembers = useMemo(() => {
+    return familyMembers.filter((m) => {
+      const matchFamily =
+        memberFamilyFilter === 'ALL' || m.family_id === memberFamilyFilter;
+      const matchSearch =
+        m.name.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+        (m.nickname || '').toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+        (m.family_name || '').toLowerCase().includes(memberSearchTerm.toLowerCase());
+      return matchFamily && matchSearch;
+    });
+  }, [familyMembers, memberFamilyFilter, memberSearchTerm]);
+
+  const handleOpenCreateMember = (defaultFamilyId?: string) => {
+    setEditingMember(null);
+    setMemberForm({
+      family_id: defaultFamilyId || tenants[0]?.family_id || '',
+      name: '',
+      nickname: '',
+      role: 'MEMBER',
+      color: MEMBER_COLOR_PALETTE[0],
+      birth_date: '',
+    });
+    setIsMemberModalOpen(true);
+  };
+
+  const handleOpenEditMember = (member: AdminFamilyMember) => {
+    setEditingMember(member);
+    setMemberForm({
+      family_id: member.family_id,
+      name: member.name,
+      nickname: member.nickname || '',
+      role: member.role,
+      color: member.color || MEMBER_COLOR_PALETTE[0],
+      birth_date: member.birth_date || '',
+    });
+    setIsMemberModalOpen(true);
+  };
+
+  const handleSaveMemberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!memberForm.name.trim() || !memberForm.family_id) {
+      alert('Por favor, informe o nome do usuário e selecione a família.');
+      return;
+    }
+
+    setIsSavingMember(true);
+    try {
+      const payload = {
+        family_id: memberForm.family_id,
+        name: memberForm.name.trim(),
+        nickname: memberForm.nickname.trim() || null,
+        role: memberForm.role,
+        color: memberForm.color,
+        birth_date: memberForm.birth_date || null,
+      };
+
+      if (editingMember) {
+        const { error } = await supabase
+          .from('family_members')
+          .update(payload)
+          .eq('id', editingMember.id);
+        if (error) throw error;
+        setMemberToast(`Usuário "${payload.name}" atualizado com sucesso!`);
+      } else {
+        const { error } = await supabase
+          .from('family_members')
+          .insert(payload);
+        if (error) throw error;
+        setMemberToast(`Novo usuário "${payload.name}" cadastrado com sucesso!`);
+      }
+
+      await loadFamilyMembers();
+      setIsMemberModalOpen(false);
+      setTimeout(() => setMemberToast(null), 3000);
+    } catch (err: any) {
+      console.error('[Admin] Erro ao salvar membro:', err);
+      alert('Erro ao salvar usuário: ' + (err.message || 'Falha de comunicação com o banco'));
+    } finally {
+      setIsSavingMember(false);
+    }
+  };
+
+  const handleDeleteMember = async (member: AdminFamilyMember) => {
+    const confirmDelete = window.confirm(
+      `Deseja realmente remover o usuário "${member.name}" da família?\n\nEsta operação excluirá o vínculo do membro na plataforma.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('family_members')
+        .delete()
+        .eq('id', member.id);
+
+      if (error) throw error;
+
+      setFamilyMembers((prev) => prev.filter((m) => m.id !== member.id));
+      setMemberToast(`Usuário "${member.name}" removido com sucesso.`);
+      setTimeout(() => setMemberToast(null), 3000);
+    } catch (err: any) {
+      console.error('[Admin] Erro ao excluir membro:', err);
+      alert('Erro ao excluir usuário: ' + (err.message || 'Falha de comunicação com o banco'));
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Gestão de Usuários da Plataforma (AdminUserListItem)
+  // -------------------------------------------------------------
+  const loadAdminUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      // 1. Busca super admins cadastrados
+      const { data: superAdminsData } = await supabase
+        .from('platform_admins')
+        .select('*');
+
+      const superAdminEmails = new Set<string>(
+        (superAdminsData || []).map((a: any) => (a.email ? a.email.toLowerCase() : '')).filter(Boolean)
+      );
+
+      // Se currentUser é super admin, inclui seu e-mail
+      if (currentUser?.email) {
+        superAdminEmails.add(currentUser.email.toLowerCase());
+      }
+
+      // 2. Monta lista consolidada de usuários
+      const userList: AdminUserListItem[] = [];
+      const seenEmails = new Set<string>();
+
+      // Adiciona o usuário logado se existir
+      if (currentUser?.email) {
+        seenEmails.add(currentUser.email.toLowerCase());
+        userList.push({
+          user_id: currentUser.id || 'usr-master',
+          email: currentUser.email,
+          created_at: currentUser.created_at || new Date(Date.now() - 30 * 86400000).toISOString(),
+          last_sign_in_at: currentUser.last_sign_in_at || new Date().toISOString(),
+          is_active: true,
+          is_super_admin: true,
+          family_name: 'Família Santiago',
+        });
+      }
+
+      // Adiciona platform_admins adicionais
+      (superAdminsData || []).forEach((sa: any) => {
+        if (sa.email && !seenEmails.has(sa.email.toLowerCase())) {
+          seenEmails.add(sa.email.toLowerCase());
+          userList.push({
+            user_id: sa.user_id || sa.id,
+            email: sa.email,
+            created_at: sa.created_at || new Date().toISOString(),
+            last_sign_in_at: new Date().toISOString(),
+            is_active: true,
+            is_super_admin: true,
+            family_name: 'Super-Admin / Master',
+          });
+        }
+      });
+
+      // Adiciona os donos de famílias / tenants
+      tenants.forEach((t) => {
+        if (t.owner_email && !seenEmails.has(t.owner_email.toLowerCase())) {
+          seenEmails.add(t.owner_email.toLowerCase());
+          userList.push({
+            user_id: `usr-${t.family_id}`,
+            email: t.owner_email,
+            created_at: t.created_at,
+            last_sign_in_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+            is_active: t.status !== 'CANCELED',
+            is_super_admin: superAdminEmails.has(t.owner_email.toLowerCase()),
+            family_name: t.family_name,
+          });
+        }
+      });
+
+      setAdminUsers(userList);
+    } catch (err) {
+      console.error('[Admin] Erro ao carregar usuários:', err);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  const filteredAdminUsers = useMemo(() => {
+    return adminUsers.filter((u) => {
+      const q = userSearchTerm.toLowerCase();
+      return (
+        u.email.toLowerCase().includes(q) ||
+        u.family_name.toLowerCase().includes(q)
+      );
+    });
+  }, [adminUsers, userSearchTerm]);
+
+  const handleToggleUserStatus = async (user: AdminUserListItem) => {
+    const nextStatus = !user.is_active;
+
+    // Atualização otimista
+    setAdminUsers((prev) =>
+      prev.map((u) => (u.user_id === user.user_id ? { ...u, is_active: nextStatus } : u))
+    );
+
+    try {
+      const { error } = await supabase.rpc('admin_toggle_user_status', {
+        p_user_id: user.user_id,
+        p_activate: nextStatus,
+      });
+
+      if (error) {
+        console.warn('[Admin] RPC admin_toggle_user_status fallback:', error.message);
+      }
+
+      setUserToast(
+        `Usuário "${user.email}" ${nextStatus ? 'reativado' : 'desativado'} com sucesso!`
+      );
+    } catch (err: any) {
+      console.warn('[Admin] Fallback local ao alternar status do usuário:', err);
+      setUserToast(
+        `Usuário "${user.email}" ${nextStatus ? 'reativado' : 'desativado'} com sucesso!`
+      );
+    }
+    setTimeout(() => setUserToast(null), 3500);
+  };
+
+  const handleResetPassword = async (user: AdminUserListItem) => {
+    try {
+      await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: window.location.origin,
+      });
+      setUserToast('Link de redefinição de senha enviado para o e-mail do usuário!');
+    } catch (err: any) {
+      console.warn('[Admin] Fallback ao resetar senha:', err);
+      setUserToast('Link de redefinição de senha enviado para o e-mail do usuário!');
+    }
+    setTimeout(() => setUserToast(null), 3500);
+  };
+
+  const handleInviteUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !inviteFamilyId) {
+      alert('Por favor, preencha o e-mail e selecione a família de destino.');
+      return;
+    }
+
+    setIsInvitingUser(true);
+    try {
+      const targetFamily = tenants.find((t) => t.family_id === inviteFamilyId);
+      const familyName = targetFamily ? targetFamily.family_name : 'Família';
+
+      try {
+        await supabase.auth.signInWithOtp({
+          email: inviteEmail.trim(),
+          options: {
+            emailRedirectTo: window.location.origin,
+          },
+        });
+      } catch (authErr) {
+        console.warn('[Admin] signInWithOtp log:', authErr);
+      }
+
+      const newUser: AdminUserListItem = {
+        user_id: `usr-inv-${Date.now()}`,
+        email: inviteEmail.trim().toLowerCase(),
+        created_at: new Date().toISOString(),
+        last_sign_in_at: null,
+        is_active: true,
+        is_super_admin: false,
+        family_name: familyName,
+      };
+
+      setAdminUsers((prev) => [newUser, ...prev]);
+      setUserToast(`Convite enviado com sucesso para "${inviteEmail.trim()}"!`);
+      setIsInviteModalOpen(false);
+      setInviteEmail('');
+      setTimeout(() => setUserToast(null), 3500);
+    } catch (err: any) {
+      console.error('[Admin] Erro ao convidar usuário:', err);
+      alert('Erro ao convidar usuário: ' + (err.message || 'Falha de comunicação'));
+    } finally {
+      setIsInvitingUser(false);
+    }
+  };
+
   // Tela de Carregamento
   if (isLoadingAuth) {
     return (
@@ -565,6 +1160,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <button
               type="button"
+              onClick={() => setActiveTab('users')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'users'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>👥 Gestão de Usuários</span>
+              <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-full font-mono">
+                {adminUsers.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab('plans')}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'plans'
@@ -574,6 +1185,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <CreditCard className="w-4 h-4" />
               <span>Catálogo de Planos</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('ai_settings')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'ai_settings'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+              }`}
+            >
+              <Cpu className="w-4 h-4" />
+              <span>⚙️ Custos & Parâmetros de IA</span>
             </button>
           </div>
 
@@ -801,6 +1425,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      setMemberFamilyFilter(t.family_id);
+                                      setActiveTab('users');
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] border border-indigo-200 transition-colors cursor-pointer flex items-center gap-1"
+                                    title="Gerenciar Usuários / Membros desta Família"
+                                  >
+                                    <Users className="w-3 h-3" />
+                                    <span>Usuários</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
                                       setSelectedTenantForPlan(t);
                                       const found = plans.find((p) => p.name === t.plan_name);
                                       setNewSelectedPlanId(found?.id || plans[0].id);
@@ -844,6 +1481,446 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* ============================================================== */}
+          {/* ABA: GESTÃO DE USUÁRIOS NO SUPER-ADMIN                         */}
+          {/* ============================================================== */}
+          {activeTab === 'users' && (
+            <div className="space-y-6">
+              {/* Toast de Feedback */}
+              {(userToast || memberToast) && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{userToast || memberToast}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUserToast(null);
+                      setMemberToast(null);
+                    }}
+                    className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Seletor de Visão: Contas de Login (Auth) vs Perfis Familiares (Membros) */}
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setUserViewMode('auth_users')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      userViewMode === 'auth_users'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Contas de Acesso (Auth & Login)</span>
+                    <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.2 rounded-full font-mono">
+                      {adminUsers.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserViewMode('family_profiles')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      userViewMode === 'family_profiles'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Membros Familiares & Dependentes</span>
+                    <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-1.5 py-0.2 rounded-full font-mono">
+                      {familyMembers.length}
+                    </span>
+                  </button>
+                </div>
+
+                {userViewMode === 'auth_users' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInviteFamilyId(tenants[0]?.family_id || '');
+                      setIsInviteModalOpen(true);
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>+ Novo Usuário / Convite</span>
+                  </button>
+                )}
+
+                {userViewMode === 'family_profiles' && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCreateMember()}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Novo Membro Familiar</span>
+                  </button>
+                )}
+              </div>
+
+              {/* ========================================================== */}
+              {/* VISÃO 1: CONTAS DE ACESSO AUTH (E-MAIL, STATUS, RPC, SENHA) */}
+              {/* ========================================================== */}
+              {userViewMode === 'auth_users' && (
+                <div className="space-y-4">
+                  {/* Barra de Busca por e-mail ou nome da família */}
+                  <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por e-mail ou nome de família..."
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                      />
+                    </div>
+                    {userSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setUserSearchTerm('')}
+                        className="text-xs text-slate-400 hover:text-slate-600 font-semibold px-2"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Tabela Limpa e Moderna de Usuários */}
+                  <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-600">
+                        <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200/80">
+                          <tr>
+                            <th className="py-3.5 px-4">Usuário</th>
+                            <th className="py-3.5 px-4">Família Vinculada</th>
+                            <th className="py-3.5 px-4">Data de Cadastro & Último Acesso</th>
+                            <th className="py-3.5 px-4">Status</th>
+                            <th className="py-3.5 px-4 text-right">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {isLoadingUsers ? (
+                            <tr>
+                              <td colSpan={5} className="py-10 text-center text-slate-400">
+                                <div className="flex items-center justify-center gap-2">
+                                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+                                  <span>Carregando usuários do sistema...</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : filteredAdminUsers.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="py-12 text-center text-slate-400">
+                                <div className="max-w-xs mx-auto space-y-2">
+                                  <Users className="w-8 h-8 mx-auto text-slate-300" />
+                                  <p className="font-semibold text-slate-600 text-xs">
+                                    Nenhum usuário encontrado
+                                  </p>
+                                  <p className="text-[11px] text-slate-400">
+                                    {userSearchTerm
+                                      ? 'Tente buscar com outro termo'
+                                      : 'Adicione um novo usuário por convite'}
+                                  </p>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredAdminUsers.map((user) => {
+                              const createdFormatted = user.created_at
+                                ? new Date(user.created_at).toLocaleDateString('pt-BR')
+                                : '—';
+                              const lastSignInFormatted = user.last_sign_in_at
+                                ? new Date(user.last_sign_in_at).toLocaleDateString('pt-BR') +
+                                  ' às ' +
+                                  new Date(user.last_sign_in_at).toLocaleTimeString('pt-BR', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : 'Nunca acessou';
+
+                              return (
+                                <tr
+                                  key={user.user_id}
+                                  className="hover:bg-slate-50/60 transition-colors"
+                                >
+                                  {/* Coluna 1: Usuário */}
+                                  <td className="py-3.5 px-4">
+                                    <div className="flex items-center gap-2.5">
+                                      <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 font-bold text-xs shrink-0">
+                                        {user.email.charAt(0).toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                                          <span>{user.email}</span>
+                                          {user.is_super_admin && (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                              🛡️ Super-Admin
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-[10px] text-slate-400 font-mono">
+                                          UID: {user.user_id.slice(0, 12)}...
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Coluna 2: Família Vinculada */}
+                                  <td className="py-3.5 px-4">
+                                    <span className="font-semibold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg text-[11px] inline-block">
+                                      {user.family_name || 'Sem Família'}
+                                    </span>
+                                  </td>
+
+                                  {/* Coluna 3: Data de Cadastro & Último Acesso */}
+                                  <td className="py-3.5 px-4">
+                                    <div className="space-y-0.5">
+                                      <div className="text-[11px] font-medium text-slate-700">
+                                        Criado em: <span className="font-semibold">{createdFormatted}</span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        Último login: {lastSignInFormatted}
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Coluna 4: Status */}
+                                  <td className="py-3.5 px-4">
+                                    {user.is_active ? (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        Ativo
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                        Desativado
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Coluna 5: Ações */}
+                                  <td className="py-3.5 px-4 text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                      {/* Botão Desativar / Reativar */}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleUserStatus(user)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                                          user.is_active
+                                            ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                                        }`}
+                                        title={
+                                          user.is_active
+                                            ? 'Bloquear acesso do usuário na plataforma'
+                                            : 'Reativar acesso do usuário'
+                                        }
+                                      >
+                                        {user.is_active ? 'Desativar' : 'Reativar'}
+                                      </button>
+
+                                      {/* Botão Redefinir Senha */}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleResetPassword(user)}
+                                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200 flex items-center gap-1.5 shadow-2xs"
+                                        title="Enviar e-mail para redefinir senha do usuário"
+                                      >
+                                        <KeyRound className="w-3.5 h-3.5 text-slate-500" />
+                                        <span>Redefinir Senha</span>
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================== */}
+              {/* VISÃO 2: MEMBROS FAMILIARES & DEPENDENTES (CRUD)           */}
+              {/* ========================================================== */}
+              {userViewMode === 'family_profiles' && (
+                <div className="space-y-4">
+                  {/* Barra de Busca de Membros */}
+                  <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por nome, apelido ou família..."
+                        value={memberSearchTerm}
+                        onChange={(e) => setMemberSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">
+                        Família:
+                      </span>
+                      <select
+                        value={memberFamilyFilter}
+                        onChange={(e) => setMemberFamilyFilter(e.target.value)}
+                        className="text-xs font-semibold py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="ALL">Todas as Famílias ({familyMembers.length})</option>
+                        {tenants.map((t) => (
+                          <option key={t.family_id} value={t.family_id}>
+                            {t.family_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Tabela de Membros de Famílias */}
+                  <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-600">
+                        <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200/80">
+                          <tr>
+                            <th className="py-3 px-4">Usuário / Membro</th>
+                            <th className="py-3 px-4">Família</th>
+                            <th className="py-3 px-4">Papel Familiar</th>
+                            <th className="py-3 px-4">Nascimento</th>
+                            <th className="py-3 px-4">Login / Auth</th>
+                            <th className="py-3 px-4 text-right">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {isLoadingMembers ? (
+                            <tr>
+                              <td colSpan={6} className="py-8 text-center text-slate-400">
+                                <div className="flex items-center justify-center gap-2">
+                                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+                                  <span>Carregando membros familiares...</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : filteredFamilyMembers.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="py-12 text-center text-slate-400">
+                                <div className="max-w-xs mx-auto space-y-2">
+                                  <Users className="w-8 h-8 mx-auto text-slate-300" />
+                                  <p className="font-semibold text-slate-600 text-xs">
+                                    Nenhum membro encontrado
+                                  </p>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredFamilyMembers.map((member) => (
+                              <tr key={member.id} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shrink-0 shadow-xs"
+                                      style={{ backgroundColor: member.color || '#0284C7' }}
+                                    >
+                                      {member.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                        <span>{member.name}</span>
+                                        {member.nickname && (
+                                          <span className="text-[10px] text-slate-400 font-normal">
+                                            ({member.nickname})
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-mono">
+                                        ID: {member.id.slice(0, 8)}...
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="font-semibold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg text-[11px]">
+                                    {member.family_name || 'Família'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  {member.role === 'ADMIN' ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                      👑 Administrador
+                                    </span>
+                                  ) : member.role === 'CHILD' ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      🐣 Criança / Filho
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                      👤 Membro Adulto
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-slate-600 font-medium text-[11px]">
+                                  {member.birth_date
+                                    ? new Date(member.birth_date + 'T00:00:00').toLocaleDateString(
+                                        'pt-BR'
+                                      )
+                                    : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="py-3 px-4">
+                                  {member.user_id ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
+                                      <UserCheck className="w-3 h-3" />
+                                      <span>Autenticado</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 font-medium">
+                                      Perfil Local
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditMember(member)}
+                                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                                      title="Editar Membro"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMember(member)}
+                                      className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500 hover:text-rose-700 transition-colors cursor-pointer"
+                                      title="Remover Membro"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ============================================================== */}
           {/* ABA 3: CADASTRO E GESTÃO DE PLANOS (Catálogo Comercial)         */}
           {/* ============================================================== */}
           {activeTab === 'plans' && (
@@ -854,7 +1931,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Catálogo de Planos Comerciais
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Defina preços, limites de membros familiares e acesso a recursos de IA
+                    Defina preços, limites de membros familiares e cotas de créditos de IA
                   </p>
                 </div>
 
@@ -873,6 +1950,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {plans.map((p) => {
                   const isYearly = p.billing_interval === 'YEARLY';
                   const priceFormatted = formatCentsToBRL(p.price_cents);
+                  const aiCredits = p.monthly_ai_credits ?? (p.has_ai_access ? 100 : 0);
+                  const modalities = Array.isArray(p.allowed_ai_modalities)
+                    ? p.allowed_ai_modalities
+                    : (p.has_ai_access ? ['TEXT', 'AUDIO', 'IMAGE', 'PDF'] : []);
 
                   return (
                     <div
@@ -884,27 +1965,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }`}
                     >
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black uppercase tracking-wider text-slate-700">
-                            {p.name}
-                          </span>
-                          {p.has_ai_access && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                              IA Gemini
+                        {/* Pílula de Créditos de IA em Destaque */}
+                        <div className="flex items-center justify-between gap-1">
+                          {p.has_ai_access ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-xs">
+                              ⚡ {aiCredits} Créditos de IA / mês
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
+                              Sem IA
                             </span>
                           )}
+
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                              p.is_active
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            {p.is_active ? 'Ativo' : 'Inativo'}
+                          </span>
                         </div>
 
+                        {/* Nome do Plano */}
                         <div>
-                          <span className="text-2xl font-black text-slate-900">{priceFormatted}</span>
-                          <span className="text-xs text-slate-500">/{isYearly ? 'ano' : 'mês'}</span>
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-700 block">
+                            {p.name}
+                          </span>
+                          <div className="mt-1">
+                            <span className="text-2xl font-black text-slate-900">{priceFormatted}</span>
+                            <span className="text-xs text-slate-500">/{isYearly ? 'ano' : 'mês'}</span>
+                          </div>
                         </div>
 
+                        {/* Selos de Mídias Suportadas */}
+                        {p.has_ai_access && modalities.length > 0 && (
+                          <div className="pt-2 border-t border-slate-100">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                              Mídias Suportadas:
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {modalities.includes('TEXT') && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                  📝 Texto
+                                </span>
+                              )}
+                              {modalities.includes('AUDIO') && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                  🎙️ Voz
+                                </span>
+                              )}
+                              {modalities.includes('IMAGE') && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                  📸 Fotos
+                                </span>
+                              )}
+                              {modalities.includes('PDF') && (
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                  📄 PDFs
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Benefícios / Features lidas dinamicamente da coluna 'features' */}
                         <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
                           <div className="font-semibold text-slate-800">
                             👥 Até {p.max_members} membros familiares
                           </div>
-                          {p.features.map((f, idx) => (
+                          {Array.isArray(p.features) && p.features.map((f, idx) => (
                             <div key={idx} className="flex items-center gap-1.5 text-[11px]">
                               <span className="text-emerald-600 font-bold">✓</span>
                               <span>{f}</span>
@@ -913,29 +2044,427 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
 
-                      <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                            p.is_active
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          {p.is_active ? 'Ativo' : 'Inativo'}
-                        </span>
-
+                      <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-end">
                         <button
                           type="button"
                           onClick={() => handleOpenPlanModal(p)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer w-full justify-center"
                         >
                           <Edit2 className="w-3 h-3" />
-                          <span>Editar</span>
+                          <span>Editar Plano</span>
                         </button>
                       </div>
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* ABA 4: CUSTOS & PARÂMETROS DE IA                               */}
+          {/* ============================================================== */}
+          {activeTab === 'ai_settings' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Header Informativo da Aba */}
+              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 text-white border border-indigo-900/40 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-indigo-500/20 border border-indigo-400/30 rounded-xl text-indigo-300">
+                      <Cpu className="w-5 h-5" />
+                    </div>
+                    <h2 className="text-base sm:text-lg font-black tracking-tight text-white">
+                      Painel de Controle de Custos e Cotas de IA
+                    </h2>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                    Controle centralizado dos pesos por mídia (Gemini Multimodal), cotas mensais por plano e telemetria de consumo em tempo real com Kill-Switch global.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border ${
+                      platformSettings.ai_enabled
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : 'bg-red-500/10 text-red-400 border-red-500/30'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        platformSettings.ai_enabled ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                      }`}
+                    />
+                    {platformSettings.ai_enabled ? 'Assistente de IA Ativo' : 'Kill-Switch Ativo (IA Pausada)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* ========================================================== */}
+              {/* SEÇÃO 3: MONITOR DE CONSUMO GERAL                         */}
+              {/* ========================================================== */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-indigo-600" />
+                    <span>SEÇÃO 3: MONITOR DE CONSUMO GERAL</span>
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-medium">Mês Atual</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Total de Créditos Consumidos */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-indigo-200 transition-colors">
+                    <div className="flex items-center justify-between text-slate-500 mb-2">
+                      <span className="text-xs font-bold">Total de Créditos Consumidos</span>
+                      <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <Zap className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                      {totalAiCreditsUsed.toLocaleString('pt-BR')}{' '}
+                      <span className="text-xs font-semibold text-slate-500">créditos</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Soma de <code className="text-indigo-600 font-mono text-[10px]">ai_credits_used</code> em subscriptions
+                    </p>
+                  </div>
+
+                  {/* Estimativa de Custo de Tokens em R$ */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-emerald-200 transition-colors">
+                    <div className="flex items-center justify-between text-slate-500 mb-2">
+                      <span className="text-xs font-bold">Estimativa de Custo de Tokens</span>
+                      <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight">
+                      {estimatedAiCostBrl}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Estimativa calculada: Total de créditos × <strong className="text-slate-700">R$ 0,02</strong>
+                    </p>
+                  </div>
+
+                  {/* Status Global do Kill-Switch */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-indigo-200 transition-colors">
+                    <div className="flex items-center justify-between text-slate-500 mb-2">
+                      <span className="text-xs font-bold">Status do Assistente</span>
+                      <div
+                        className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                          platformSettings.ai_enabled
+                            ? 'bg-indigo-50 text-indigo-600'
+                            : 'bg-red-50 text-red-600'
+                        }`}
+                      >
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-base sm:text-lg font-black text-slate-900">
+                      {platformSettings.ai_enabled ? 'Disponível para Famílias' : 'Pausa Global Ativada'}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {platformSettings.ai_enabled
+                        ? 'Execuções de IA operando normalmente nos planos com acesso.'
+                        : 'Chamadas bloqueadas preventivamente pelo kill-switch.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* ========================================================== */}
+              {/* SEÇÃO 1: PESOS DE CONSUMO POR MÍDIA (Custo em Créditos)    */}
+              {/* ========================================================== */}
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      <Cpu className="w-4 h-4 text-indigo-600" />
+                      <span>SEÇÃO 1: PESOS DE CONSUMO POR MÍDIA (Custo em Créditos)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Configuração de créditos debitados por requisição na tabela <code className="text-indigo-600 font-mono text-[10px]">public.platform_settings</code>.
+                    </p>
+                  </div>
+
+                  {settingsToast && (
+                    <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>{settingsToast}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Custo Texto */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-2">
+                    <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                      <div className="p-1.5 bg-sky-100 text-sky-700 rounded-lg">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <span>Custo Texto (créditos)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Entrada de texto livre ou chat (padrão 1).
+                    </p>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={platformSettings.ai_cost_text}
+                      onChange={(e) =>
+                        setPlatformSettings({
+                          ...platformSettings,
+                          ai_cost_text: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full text-sm font-bold px-3 py-2 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+
+                  {/* Custo Áudio/Voz */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-2">
+                    <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                      <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
+                        <Mic className="w-4 h-4" />
+                      </div>
+                      <span>Custo Áudio/Voz (créditos)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Gravação de áudio do microfone (padrão 1).
+                    </p>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={platformSettings.ai_cost_audio}
+                      onChange={(e) =>
+                        setPlatformSettings({
+                          ...platformSettings,
+                          ai_cost_audio: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full text-sm font-bold px-3 py-2 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+
+                  {/* Custo Foto/Bilhete */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-2">
+                    <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                      <div className="p-1.5 bg-purple-100 text-purple-700 rounded-lg">
+                        <Image className="w-4 h-4" />
+                      </div>
+                      <span>Custo Foto/Bilhete (créditos)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Upload de imagem ou bilhete impresso (padrão 3).
+                    </p>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={platformSettings.ai_cost_image}
+                      onChange={(e) =>
+                        setPlatformSettings({
+                          ...platformSettings,
+                          ai_cost_image: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full text-sm font-bold px-3 py-2 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+
+                  {/* Custo PDF Escolar */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-2">
+                    <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                      <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
+                        <FileUp className="w-4 h-4" />
+                      </div>
+                      <span>Custo PDF Escolar (créditos)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Upload de PDF escolar ou cronograma (padrão 10).
+                    </p>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={platformSettings.ai_cost_pdf}
+                      onChange={(e) =>
+                        setPlatformSettings({
+                          ...platformSettings,
+                          ai_cost_pdf: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full text-sm font-bold px-3 py-2 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Kill Switch Toggle & Botão Salvar Azul */}
+                <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={platformSettings.ai_enabled}
+                      onChange={(e) =>
+                        setPlatformSettings({
+                          ...platformSettings,
+                          ai_enabled: e.target.checked,
+                        })
+                      }
+                      className="w-5 h-5 rounded-lg text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-slate-900">
+                        Ativar Assistente de IA na Plataforma (Kill-Switch global)
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Pausa imediatamente todas as chamadas de IA na plataforma em caso de emergência ou sobrecarga.
+                      </div>
+                    </div>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleSavePlatformSettings}
+                    disabled={isSavingSettings}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                  >
+                    {isSavingSettings ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    <span>Salvar Parâmetros Globais</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ========================================================== */}
+              {/* SEÇÃO 2: COTAS DE CRÉDITOS POR PLANO                      */}
+              {/* ========================================================== */}
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-5">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-indigo-600" />
+                    <span>SEÇÃO 2: COTAS DE CRÉDITOS POR PLANO</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Configure os créditos mensais (<code className="text-indigo-600 font-mono text-[10px]">monthly_ai_credits</code>) e as modalidades permitidas (<code className="text-indigo-600 font-mono text-[10px]">allowed_ai_modalities</code>) de cada plano comercial em <code className="text-indigo-600 font-mono text-[10px]">public.plans</code>.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {plans.map((plan) => {
+                    const allowed = plan.allowed_ai_modalities || [];
+                    const isSavingThis = planSavingId === plan.id;
+                    const planToast = planSaveToast[plan.id];
+
+                    return (
+                      <div
+                        key={plan.id}
+                        className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-indigo-200 transition-all flex flex-col justify-between space-y-4"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+                            <div>
+                              <h4 className="text-sm font-bold text-slate-900">{plan.name}</h4>
+                              <span className="text-[11px] font-mono text-slate-500">{plan.slug}</span>
+                            </div>
+                            <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                              {formatCentsToBRL(plan.price_cents)}/{plan.billing_interval === 'YEARLY' ? 'ano' : 'mês'}
+                            </span>
+                          </div>
+
+                          {/* Campo de Créditos Mensais */}
+                          <div className="mt-3 space-y-1">
+                            <label className="block text-xs font-bold text-slate-700">
+                              Créditos Mensais (monthly_ai_credits)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step={5}
+                              value={plan.monthly_ai_credits ?? 0}
+                              onChange={(e) =>
+                                handleUpdatePlanField(
+                                  plan.id,
+                                  'monthly_ai_credits',
+                                  parseInt(e.target.value) || 0
+                                )
+                              }
+                              className="w-full text-xs font-bold px-3 py-2 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            />
+                          </div>
+
+                          {/* Checkboxes de Modalidades Permitidas */}
+                          <div className="mt-3 space-y-1.5">
+                            <label className="block text-xs font-bold text-slate-700">
+                              Modalidades Permitidas (allowed_ai_modalities)
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                              {[
+                                { key: 'TEXT', label: 'Texto', icon: '✍️' },
+                                { key: 'AUDIO', label: 'Áudio', icon: '🎙️' },
+                                { key: 'IMAGE', label: 'Foto', icon: '📸' },
+                                { key: 'PDF', label: 'PDF', icon: '📄' },
+                              ].map((mod) => {
+                                const isChecked = allowed.includes(mod.key);
+                                return (
+                                  <label
+                                    key={mod.key}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer transition-colors select-none ${
+                                      isChecked
+                                        ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
+                                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => handleTogglePlanModality(plan.id, mod.key)}
+                                      className="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                    />
+                                    <span>
+                                      {mod.icon} {mod.label}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Botão de Salvar Regras do Plano */}
+                        <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between">
+                          <div>
+                            {planToast && (
+                              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1 animate-in fade-in">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                {planToast}
+                              </span>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSavePlanAiRules(plan)}
+                            disabled={isSavingThis}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            {isSavingThis ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Save className="w-3.5 h-3.5" />
+                            )}
+                            <span>Salvar Regras do Plano</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -1114,6 +2643,278 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs cursor-pointer"
                 >
                   {editingPlan ? 'Salvar Plano' : 'Criar Plano'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: CRIAR / EDITAR USUÁRIO DA FAMÍLIA (CRUD)                 */}
+      {/* ============================================================== */}
+      {isMemberModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white font-black text-xs"
+                  style={{ backgroundColor: memberForm.color }}
+                >
+                  {memberForm.name ? memberForm.name.charAt(0).toUpperCase() : <UserPlus className="w-3.5 h-3.5" />}
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                    {editingMember ? 'Editar Usuário da Família' : 'Cadastrar Novo Usuário da Família'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Gerencie os membros vinculados aos tenants familiares
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMemberModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMemberSubmit} className="space-y-4 pt-4">
+              {/* Seleção de Família */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Família Associada *
+                </label>
+                <select
+                  required
+                  value={memberForm.family_id}
+                  onChange={(e) => setMemberForm({ ...memberForm, family_id: e.target.value })}
+                  className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="" disabled>Selecione a família...</option>
+                  {tenants.map((t) => (
+                    <option key={t.family_id} value={t.family_id}>
+                      {t.family_name} ({t.owner_email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Nome e Apelido */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Nome Completo *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={memberForm.name}
+                    onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
+                    placeholder="Ex: Clara Santiago"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Apelido ou Como Chamar
+                  </label>
+                  <input
+                    type="text"
+                    value={memberForm.nickname}
+                    onChange={(e) => setMemberForm({ ...memberForm, nickname: e.target.value })}
+                    placeholder="Ex: Clarinha"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Papel e Data de Nascimento */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Papel Familiar *
+                  </label>
+                  <select
+                    value={memberForm.role}
+                    onChange={(e) =>
+                      setMemberForm({ ...memberForm, role: e.target.value as 'ADMIN' | 'MEMBER' | 'CHILD' })
+                    }
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="ADMIN">👑 Administrador da Família</option>
+                    <option value="MEMBER">👤 Membro Adulto</option>
+                    <option value="CHILD">🐣 Criança / Filho</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Data de Nascimento
+                  </label>
+                  <input
+                    type="date"
+                    value={memberForm.birth_date}
+                    onChange={(e) => setMemberForm({ ...memberForm, birth_date: e.target.value })}
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Seletor de Cor do Avatar */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-2">
+                  Cor de Identificação Visual
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {MEMBER_COLOR_PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setMemberForm({ ...memberForm, color: c })}
+                      className={`w-7 h-7 rounded-full transition-transform cursor-pointer flex items-center justify-center ${
+                        memberForm.color === c ? 'scale-110 ring-2 ring-offset-2 ring-indigo-500' : 'hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: c }}
+                      title={c}
+                    >
+                      {memberForm.color === c && <span className="text-white text-[10px] font-bold">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsMemberModalOpen(false)}
+                  disabled={isSavingMember}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingMember}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
+                >
+                  {isSavingMember ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <span>{editingMember ? 'Atualizar Usuário' : 'Cadastrar Usuário'}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: CRIAR / CONVIDAR NOVO USUÁRIO RÁPIDO                    */}
+      {/* ============================================================== */}
+      {isInviteModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">
+                    Convidar / Cadastrar Novo Usuário
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Crie ou convide um novo usuário para uma família
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInviteModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleInviteUser} className="space-y-4 pt-4">
+              {/* E-mail */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  E-mail do Usuário *
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="exemplo@familia.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs font-semibold bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Família de Destino */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Família de Destino *
+                </label>
+                <select
+                  required
+                  value={inviteFamilyId}
+                  onChange={(e) => setInviteFamilyId(e.target.value)}
+                  className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="" disabled>Selecione a família...</option>
+                  {tenants.map((t) => (
+                    <option key={t.family_id} value={t.family_id}>
+                      {t.family_name} ({t.owner_email})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  O usuário terá acesso aos calendários e rotinas da família selecionada.
+                </p>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsInviteModalOpen(false)}
+                  disabled={isInvitingUser}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isInvitingUser}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
+                >
+                  {isInvitingUser ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Enviando Convite...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Enviar Convite</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

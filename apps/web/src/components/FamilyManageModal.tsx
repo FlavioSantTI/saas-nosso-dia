@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Family, FamilyMember, MemberRole, Plan } from '../types';
 import { getFamilyInviteUrl } from '../lib/url';
 import { createSubscription, formatCentsToBRL } from '../lib/asaas';
+import { supabase } from '../lib/supabase';
 import { CreditCard, Users, ShieldCheck, CheckCircle2, Sparkles, QrCode, ArrowRight } from 'lucide-react';
 
 interface FamilyManageModalProps {
@@ -27,6 +28,48 @@ const COLOR_PALETTE = [
   '#65A30D', // Lima / Oliva
   '#4F46E5', // Índigo
   '#475569', // Ardósia
+];
+
+const DEFAULT_PLANS_FALLBACK: Plan[] = [
+  {
+    id: 'd2222222-2222-2222-2222-222222222222',
+    name: 'Família Essencial',
+    slug: 'essencial',
+    price_cents: 2990,
+    billing_interval: 'MONTHLY',
+    max_members: 5,
+    has_ai_access: false,
+    features: ['Até 5 membros', 'Sincronização ilimitada', 'Painel de Resumo & Balanço', 'Lembretes'],
+    is_active: true,
+    monthly_ai_credits: 0,
+    allowed_ai_modalities: [],
+  },
+  {
+    id: 'd3333333-3333-3333-3333-333333333333',
+    name: 'Família Pro IA',
+    slug: 'pro-ia',
+    price_cents: 4990,
+    billing_interval: 'MONTHLY',
+    max_members: 10,
+    has_ai_access: true,
+    features: ['Até 10 membros', 'Captura Inteligente Gemini IA', 'Briefing Matinal', 'Suporte VIP'],
+    is_active: true,
+    monthly_ai_credits: 100,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
+  },
+  {
+    id: 'd4444444-4444-4444-4444-444444444444',
+    name: 'Família Pro IA Anual',
+    slug: 'pro-ia-anual',
+    price_cents: 47880,
+    billing_interval: 'YEARLY',
+    max_members: 10,
+    has_ai_access: true,
+    features: ['2 meses grátis (economia R$ 120)', 'Acesso Completo IA', 'Membros ilimitados', 'Briefing e Resumo'],
+    is_active: true,
+    monthly_ai_credits: 150,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
+  },
 ];
 
 export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
@@ -66,44 +109,42 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState<any | null>(null);
 
-  const AVAILABLE_PLANS: Plan[] = [
-    {
-      id: 'd2222222-2222-2222-2222-222222222222',
-      name: 'Família Essencial',
-      slug: 'essencial',
-      price_cents: 2990,
-      billing_interval: 'MONTHLY',
-      max_members: 5,
-      has_ai_access: false,
-      features: ['Até 5 membros', 'Sincronização ilimitada', 'Painel de Resumo & Balanço', 'Lembretes'],
-      is_active: true,
-    },
-    {
-      id: 'd3333333-3333-3333-3333-333333333333',
-      name: 'Família Pro IA',
-      slug: 'pro-ia',
-      price_cents: 4990,
-      billing_interval: 'MONTHLY',
-      max_members: 10,
-      has_ai_access: true,
-      features: ['Até 10 membros', 'Captura Inteligente Gemini IA', 'Briefing Matinal', 'Suporte VIP'],
-      is_active: true,
-    },
-    {
-      id: 'd4444444-4444-4444-4444-444444444444',
-      name: 'Família Pro IA Anual',
-      slug: 'pro-ia-anual',
-      price_cents: 47880,
-      billing_interval: 'YEARLY',
-      max_members: 10,
-      has_ai_access: true,
-      features: ['2 meses grátis (economia R$ 120)', 'Acesso Completo IA', 'Membros ilimitados', 'Briefing e Resumo'],
-      is_active: true,
-    },
-  ];
+  // Lista dinâmica de planos vindos diretamente do banco de dados (public.plans)
+  const [availablePlans, setAvailablePlans] = useState<Plan[]>(DEFAULT_PLANS_FALLBACK);
+
+  useEffect(() => {
+    async function loadLivePlans() {
+      try {
+        const { data, error } = await supabase
+          .from('plans')
+          .select('*')
+          .eq('is_active', true)
+          .order('price_cents', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          setAvailablePlans(
+            data.map((p) => ({
+              ...p,
+              features: Array.isArray(p.features) ? p.features : [],
+              monthly_ai_credits: p.monthly_ai_credits ?? (p.has_ai_access ? 100 : 0),
+              allowed_ai_modalities: Array.isArray(p.allowed_ai_modalities)
+                ? p.allowed_ai_modalities
+                : (p.has_ai_access ? ['TEXT', 'AUDIO', 'IMAGE', 'PDF'] : []),
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn('[Billing] Falha ao consultar public.plans:', err);
+      }
+    }
+
+    if (isOpen) {
+      loadLivePlans();
+    }
+  }, [isOpen]);
 
   const handleSubscribeAsaas = async () => {
-    const chosenPlan = AVAILABLE_PLANS.find((p) => p.slug === selectedPlanSlug) || AVAILABLE_PLANS[1];
+    const chosenPlan = availablePlans.find((p) => p.slug === selectedPlanSlug) || availablePlans[0];
     try {
       setIsSubscribing(true);
       const res = await createSubscription(`cus_fam_${family.id.slice(0, 8)}`, chosenPlan, paymentMethod);
@@ -534,38 +575,94 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {AVAILABLE_PLANS.map((plan) => {
+                  {availablePlans.map((plan) => {
                     const isSelected = selectedPlanSlug === plan.slug;
+                    const isYearly = plan.billing_interval === 'YEARLY';
+                    const priceFormatted = formatCentsToBRL(plan.price_cents);
+                    const aiCredits = plan.monthly_ai_credits ?? 0;
+                    const modalities = plan.allowed_ai_modalities || [];
+
                     return (
                       <div
                         key={plan.id}
                         onClick={() => setSelectedPlanSlug(plan.slug)}
                         className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                           isSelected
-                            ? 'border-indigo-600 bg-indigo-50/40 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                            ? 'border-indigo-600 bg-indigo-50/50 shadow-md ring-2 ring-indigo-500/20'
+                            : 'border-slate-200 hover:border-slate-300 bg-white hover:shadow-xs'
                         }`}
                       >
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
+                          {/* Nome e Seleção */}
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-slate-900">{plan.name}</span>
-                            {isSelected && <CheckCircle2 className="w-4 h-4 text-indigo-600" />}
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                              {plan.name}
+                            </span>
+                            {isSelected && (
+                              <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                                <CheckCircle2 className="w-3 h-3 text-indigo-600" />
+                                <span>Escolhido</span>
+                              </span>
+                            )}
                           </div>
-                          <div>
+
+                          {/* Pílula Chamativa com Créditos de IA */}
+                          <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-gradient-to-r from-amber-500/15 via-indigo-500/15 to-purple-500/15 text-indigo-950 border border-indigo-200 shadow-2xs">
+                            <span className="text-amber-500">⚡</span>
+                            <span>{aiCredits} Créditos de IA / mês</span>
+                          </div>
+
+                          {/* Selos de Mídias Suportadas */}
+                          <div className="flex flex-wrap items-center gap-1">
+                            {modalities.includes('TEXT') && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100 flex items-center gap-0.5">
+                                <span>📝</span> Texto
+                              </span>
+                            )}
+                            {modalities.includes('AUDIO') && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-0.5">
+                                <span>🎙️</span> Voz
+                              </span>
+                            )}
+                            {modalities.includes('IMAGE') && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100 flex items-center gap-0.5">
+                                <span>📸</span> Fotos
+                              </span>
+                            )}
+                            {modalities.includes('PDF') && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center gap-0.5">
+                                <span>📄</span> PDFs
+                              </span>
+                            )}
+                            {modalities.length === 0 && (
+                              <span className="text-[10px] font-medium text-slate-400 italic">
+                                Sem IA multimodal
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Formatação Monetária Limpa Padrão Brasileiro */}
+                          <div className="pt-0.5">
                             <span className="text-lg font-black text-slate-900">
-                              {formatCentsToBRL(plan.price_cents)}
+                              {priceFormatted}
                             </span>
-                            <span className="text-[11px] text-slate-500">
-                              /{plan.billing_interval === 'YEARLY' ? 'ano' : 'mês'}
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              /{isYearly ? 'ano' : 'mês'}
                             </span>
                           </div>
-                          <ul className="text-[10px] text-slate-600 space-y-1 pt-1 border-t border-slate-100">
-                            {plan.features.slice(0, 3).map((f, i) => (
-                              <li key={i} className="flex items-center gap-1">
-                                <span className="text-emerald-600 font-bold">✓</span>
-                                <span className="line-clamp-1">{f}</span>
-                              </li>
-                            ))}
+
+                          {/* Lista de Benefícios lida diretamente da coluna features (JSONB) */}
+                          <ul className="text-[11px] text-slate-600 space-y-1 pt-1.5 border-t border-slate-100">
+                            <li className="font-semibold text-slate-700 flex items-center gap-1">
+                              <span>👥</span> Até {plan.max_members} membros
+                            </li>
+                            {Array.isArray(plan.features) &&
+                              plan.features.map((f, i) => (
+                                <li key={i} className="flex items-start gap-1">
+                                  <span className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</span>
+                                  <span className="leading-tight">{f}</span>
+                                </li>
+                              ))}
                           </ul>
                         </div>
                       </div>

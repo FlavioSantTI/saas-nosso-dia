@@ -1607,7 +1607,7 @@ export const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="flex items-center gap-1.5 font-medium">
             <span className="font-bold text-slate-800">Nosso Dia</span>
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.5.0</span>
+            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.5.1</span>
           </p>
 
           <div className="flex items-center gap-4">
@@ -1631,6 +1631,8 @@ export const App: React.FC = () => {
         isOpen={isQuickAddOpen}
         onClose={() => setIsQuickAddOpen(false)}
         members={members}
+        family={family}
+        onOpenUpgrade={() => setIsManageFamilyOpen(true)}
         onConfirmAdd={handleConfirmQuickAdd}
       />
 

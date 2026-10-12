@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { FamilyMember } from '../types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Family, FamilyMember } from '../types';
+import { supabase } from '../lib/supabase';
 import {
   parseTextRoutine,
   parseAudioRoutine,
@@ -25,6 +26,8 @@ interface QuickAddProps {
   isOpen: boolean;
   onClose: () => void;
   members: FamilyMember[];
+  family?: Family | null;
+  onOpenUpgrade?: () => void;
   onConfirmAdd: (data: any) => void;
 }
 
@@ -36,6 +39,8 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   isOpen,
   onClose,
   members,
+  family,
+  onOpenUpgrade,
   onConfirmAdd,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('text');
@@ -59,7 +64,32 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [parsedResult, setParsedResult] = useState<GeminiRoutineOutput | null>(null);
 
-  // Limpa estados ao fechar ou reabrir
+  // Estados de Cota e Créditos de IA
+  const [remainingCredits, setRemainingCredits] = useState<number | null>(null);
+  const [aiCosts, setAiCosts] = useState<{ TEXT: number; AUDIO: number; IMAGE: number; PDF: number }>({
+    TEXT: 1,
+    AUDIO: 1,
+    IMAGE: 3,
+    PDF: 10,
+  });
+  const [quotaBlocked, setQuotaBlocked] = useState<{ blocked: boolean; reason: string } | null>(null);
+
+  // Modalidade e Custo da Operação Atual
+  const currentModality: 'TEXT' | 'AUDIO' | 'IMAGE' | 'PDF' = useMemo(() => {
+    if (activeTab === 'text') return 'TEXT';
+    if (activeTab === 'audio') return 'AUDIO';
+    if (selectedFile) {
+      const isPdf =
+        selectedFile.type === 'application/pdf' ||
+        selectedFile.name.toLowerCase().endsWith('.pdf');
+      return isPdf ? 'PDF' : 'IMAGE';
+    }
+    return 'IMAGE';
+  }, [activeTab, selectedFile]);
+
+  const currentOperationCost = aiCosts[currentModality] || 1;
+
+  // Limpa estados ao fechar ou reabrir e busca cotas da família
   useEffect(() => {
     if (!isOpen) {
       if (isRecording) {
@@ -67,17 +97,101 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
       }
       setParsedResult(null);
       setErrorMsg(null);
+      setQuotaBlocked(null);
       setInputText('');
       setSelectedFile(null);
       setRecordingSeconds(0);
+      return;
     }
-  }, [isOpen]);
+
+    // Carrega custos globais e saldo de créditos da família
+    async function loadQuotaData() {
+      try {
+        // 1. Busca custos configurados na plataforma
+        const { data: settings } = await supabase
+          .from('platform_settings')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (settings) {
+          setAiCosts({
+            TEXT: settings.ai_cost_text ?? 1,
+            AUDIO: settings.ai_cost_audio ?? 1,
+            IMAGE: settings.ai_cost_image ?? 3,
+            PDF: settings.ai_cost_pdf ?? 10,
+          });
+        }
+
+        // 2. Busca assinatura e créditos da família
+        if (family?.id) {
+          const { data: sub } = await supabase
+            .from('subscriptions')
+            .select('ai_credits_used, plan:plans(monthly_ai_credits)')
+            .eq('family_id', family.id)
+            .maybeSingle();
+
+          if (sub) {
+            const monthlyCredits = (sub.plan as any)?.monthly_ai_credits ?? 30;
+            const used = sub.ai_credits_used ?? 0;
+            setRemainingCredits(Math.max(0, monthlyCredits - used));
+          } else {
+            setRemainingCredits(30);
+          }
+        }
+      } catch (err) {
+        console.warn('[QuickAdd] Falha ao carregar cota de IA:', err);
+      }
+    }
+
+    loadQuotaData();
+  }, [isOpen, family?.id]);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  // Verificação e Débito de Cota via RPC do Supabase antes de disparar Gemini
+  const checkAndConsumeQuota = async (modality: 'TEXT' | 'AUDIO' | 'IMAGE' | 'PDF'): Promise<boolean> => {
+    if (!family?.id) {
+      return true;
+    }
+
+    try {
+      const { data: quotaResult, error: quotaErr } = await supabase.rpc('consume_ai_credits', {
+        p_family_id: family.id,
+        p_modality: modality,
+      });
+
+      if (quotaErr) {
+        console.warn('[QuickAdd] Aviso na RPC consume_ai_credits:', quotaErr);
+      }
+
+      if (quotaResult && quotaResult.allowed === false) {
+        setQuotaBlocked({
+          blocked: true,
+          reason: quotaResult.reason || 'Cota de créditos de IA atingida ou modalidade indisponível no plano da sua família.',
+        });
+        return false;
+      }
+
+      // Se permitido, atualiza o saldo visual
+      if (quotaResult && typeof quotaResult.credits_remaining === 'number') {
+        setRemainingCredits(quotaResult.credits_remaining);
+      } else {
+        const cost = aiCosts[modality] || 1;
+        setRemainingCredits((prev) => (prev !== null ? Math.max(0, prev - cost) : null));
+      }
+
+      return true;
+    } catch (err: any) {
+      console.error('[QuickAdd] Erro ao invocar consume_ai_credits:', err);
+      return true;
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -103,8 +217,13 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   // -------------------------------------------------------------
   const handleExtractFromText = async () => {
     if (!inputText.trim()) return;
-    setIsParsing(true);
+    setQuotaBlocked(null);
     setErrorMsg(null);
+
+    const allowed = await checkAndConsumeQuota('TEXT');
+    if (!allowed) return;
+
+    setIsParsing(true);
     try {
       const data = await parseTextRoutine(inputText.trim());
       setParsedResult(data);
@@ -118,6 +237,7 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
 
   const startRecording = async () => {
     setErrorMsg(null);
+    setQuotaBlocked(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
@@ -171,8 +291,13 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   };
 
   const processAudio = async (blob: Blob) => {
-    setIsParsing(true);
+    setQuotaBlocked(null);
     setErrorMsg(null);
+
+    const allowed = await checkAndConsumeQuota('AUDIO');
+    if (!allowed) return;
+
+    setIsParsing(true);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
@@ -198,9 +323,19 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     setSelectedFile(file);
-    setIsParsing(true);
+    setQuotaBlocked(null);
     setErrorMsg(null);
 
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const modality: 'PDF' | 'IMAGE' = isPdf ? 'PDF' : 'IMAGE';
+
+    const allowed = await checkAndConsumeQuota(modality);
+    if (!allowed) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setIsParsing(true);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
@@ -317,6 +452,48 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
             >
               <span>📸</span> Foto / PDF
             </button>
+          </div>
+        )}
+
+        {/* Aviso em Vermelho: Bloqueio de Cota de IA */}
+        {quotaBlocked && (
+          <div className="mb-3 p-3.5 bg-red-50 border border-red-200 rounded-2xl space-y-2.5 animate-in fade-in">
+            <div className="flex items-start gap-2.5">
+              <div className="p-1.5 bg-red-100 rounded-xl text-red-600 shrink-0 mt-0.5">
+                <AlertCircle className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-xs font-bold text-red-900 leading-tight">
+                  Limite de IA Atingido ou Modalidade Não Permitida
+                </h4>
+                <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                  {quotaBlocked.reason}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1 border-t border-red-100">
+              <button
+                type="button"
+                onClick={() => setQuotaBlocked(null)}
+                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+              {onOpenUpgrade && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenUpgrade();
+                  }}
+                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Fazer Upgrade de Plano</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -601,18 +778,31 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
           )}
         </div>
 
-        {/* Rodapé quando em modo de entrada */}
-        {!parsedResult && (
-          <div className="pt-3 border-t border-slate-100 flex justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-slate-500 hover:text-slate-700 font-semibold text-xs rounded-xl transition-all"
-            >
-              Cancelar
-            </button>
+        {/* Rodapé com Saldo Transparente de Créditos */}
+        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+          <div className="flex items-center flex-wrap gap-1.5 text-[11px] sm:text-xs text-slate-500 font-medium">
+            <span className="text-amber-500 font-bold">⚡ Saldo:</span>
+            <span className="font-bold text-slate-700">
+              {remainingCredits !== null ? remainingCredits : '--'} créditos restantes este mês
+            </span>
+            <span className="text-slate-300 hidden sm:inline">•</span>
+            <span className="text-slate-500">
+              Esta operação consome <strong className="text-indigo-600 font-bold">{currentOperationCost}</strong> {currentOperationCost === 1 ? 'crédito' : 'créditos'}
+            </span>
           </div>
-        )}
+
+          {!parsedResult && (
+            <div className="flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-slate-500 hover:text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

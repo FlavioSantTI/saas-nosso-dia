@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.5.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.5.1-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,29 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.5.1] — 2026-10-12
+#### 👥 Painel de Gestão e Acessos de Usuários no Super-Admin (`/admin`)
+- **Nova Aba "Gestão de Usuários" (`AdminDashboard.tsx`):**
+  - Adicionada aba dedicada **`[ 👥 Gestão de Usuários ]`** no topo do painel administrativo.
+  - Interface tipada `AdminUserListItem` consolidando dados de contas: E-mail, Família Vinculada, Data de Cadastro, Último Acesso, Status de Ativação e indicação de Super-Admin.
+- **Tabela Moderna e Ações Administrativas:**
+  - **Coluna 1 (Usuário):** E-mail com badge visual `🛡️ Super-Admin` e UID do Supabase.
+  - **Coluna 2 (Família Vinculada):** Nome da família/tenant associado com badge estilizado.
+  - **Coluna 3 (Cadastro & Último Acesso):** Datas formatadas em padrão pt-BR com horário do último login.
+  - **Coluna 4 (Status):** Pílulas interativas `● Ativo` (verde) e `● Desativado` (vermelho).
+  - **Coluna 5 (Ações):**
+    - **[ Desativar ] / [ Reativar ]:** Aciona a RPC `admin_toggle_user_status` no Supabase, com atualização otimista na tela e feedback via Toast.
+    - **[ Redefinir Senha ]:** Dispara e-mail oficial de redefinição de senha pelo Supabase Auth (`supabase.auth.resetPasswordForEmail`) com notificação instantânea.
+- **Modal de Criação / Convite Rápido de Usuário (`+ Novo Usuário / Convite`):**
+  - Modal com campos para E-mail e seleção da Família de destino, disparando convite administrativo e integrando o novo usuário à plataforma.
+- **Sub-Visão de Perfis Familiares e Dependentes:**
+  - Alternador intuitivo permitindo gerenciar tanto as contas de autenticação (login) quanto os perfis familiares (dependentes, crianças e cores de avatar).
+- **Catálogo Dinâmico de Planos com IA Multimodal:**
+  - Exibição de créditos de IA (`⚡ [X] Créditos de IA / mês`) e selos de mídias suportadas (`📝 Texto`, `🎙️ Voz`, `📸 Fotos`, `📄 PDFs`) nos cards de planos do Super-Admin e no modal de assinatura.
+- **Migration de Segurança no Banco:**
+  - `20261012000001_add_admin_user_management.sql`: Criação da RPC `public.admin_toggle_user_status(UUID, BOOLEAN)` com verificação de privilégios de Super-Admin.
+- **Rodapé Global:** Rótulo de versão atualizado para `v1.5.1`.
 
 ### [v1.5.0] — 2026-10-11
 #### 🚪 Refinamento do Fluxo de Autenticação, Logout Canônico & Roteamento Standalone

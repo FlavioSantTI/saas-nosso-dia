@@ -75,6 +75,8 @@ export interface Plan {
   has_ai_access: boolean;
   features: string[];
   is_active: boolean;
+  monthly_ai_credits?: number;
+  allowed_ai_modalities?: string[];
 }
 
 export interface Subscription {
@@ -85,6 +87,7 @@ export interface Subscription {
   current_period_end: string;
   asaas_customer_id?: string | null;
   asaas_subscription_id?: string | null;
+  ai_credits_used?: number;
   plan?: Plan;
 }
 
@@ -96,4 +99,25 @@ export interface TenantBillingInfo {
   status: string;
   created_at: string;
   current_period_end: string;
+  ai_credits_used?: number;
+}
+
+export interface PlatformSettings {
+  id: string;
+  ai_cost_text: number;
+  ai_cost_audio: number;
+  ai_cost_image: number;
+  ai_cost_pdf: number;
+  ai_enabled: boolean;
+  updated_at: string;
+}
+
+export interface AdminUserListItem {
+  user_id: string;
+  email: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+  is_active: boolean;
+  is_super_admin: boolean;
+  family_name: string;
 }
