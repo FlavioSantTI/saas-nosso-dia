@@ -11,7 +11,7 @@ interface FamilyManageModalProps {
   family: Family;
   members: FamilyMember[];
   onUpdateFamily: (name: string) => Promise<void>;
-  onAddMember: (member: { name: string; nickname?: string | null; role: MemberRole; color: string }) => Promise<void>;
+  onAddMember: (member: { name: string; nickname?: string | null; email?: string | null; role: MemberRole; color: string }) => Promise<void>;
   onUpdateMember: (member: FamilyMember) => Promise<void>;
   onDeleteMember: (memberId: string) => Promise<void>;
   onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -90,6 +90,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   // Estado para novo membro
   const [newName, setNewName] = useState('');
   const [newNickname, setNewNickname] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<MemberRole>('CHILD');
   const [newColor, setNewColor] = useState(COLOR_PALETTE[0]);
   const [isAddingMember, setIsAddingMember] = useState(false);
@@ -99,6 +100,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
     () => members.reduce((acc, m) => ({ ...acc, [m.id]: { ...m } }), {})
   );
   const [savingMemberId, setSavingMemberId] = useState<string | null>(null);
+  const [invitingMemberId, setInvitingMemberId] = useState<string | null>(null);
 
   // Aba ativa do modal: 'members' ou 'billing'
   const [modalTab, setModalTab] = useState<'members' | 'billing'>('members');
@@ -186,15 +188,45 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
       await onAddMember({
         name: newName.trim(),
         nickname: newNickname.trim() || null,
+        email: newEmail.trim() || null,
         role: newRole,
         color: newColor,
       });
       setNewName('');
       setNewNickname('');
+      setNewEmail('');
     } catch (err) {
       console.error(err);
     } finally {
       setIsAddingMember(false);
+    }
+  };
+
+  const handleSendInvite = async (member: FamilyMember) => {
+    if (!member.email || member.role === 'CHILD') return;
+    try {
+      setInvitingMemberId(member.id);
+      await supabase.auth.signInWithOtp({
+        email: member.email.trim(),
+        options: {
+          data: { family_id: member.family_id },
+          emailRedirectTo: window.location.origin,
+        },
+      });
+      if (onToast) {
+        onToast(`Convite de acesso enviado com sucesso para ${member.email}!`, 'success');
+      } else {
+        alert(`Convite de acesso enviado com sucesso para ${member.email}!`);
+      }
+    } catch (err: any) {
+      console.error('[Invite] Erro ao enviar convite:', err);
+      if (onToast) {
+        onToast(`Erro ao enviar convite: ${err.message || 'Falha de comunicação'}`, 'error');
+      } else {
+        alert(`Erro ao enviar convite: ${err.message || 'Falha de comunicação'}`);
+      }
+    } finally {
+      setInvitingMemberId(null);
     }
   };
 
@@ -364,6 +396,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                 const hasChanged =
                   current.name !== m.name ||
                   (current.nickname || '') !== (m.nickname || '') ||
+                  (current.email || '') !== (m.email || '') ||
                   current.role !== m.role ||
                   current.color !== m.color;
 
@@ -452,6 +485,33 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                         className="flex-1 text-xs px-2.5 py-1 bg-slate-50/70 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </div>
+
+                    {/* Campo E-mail e Disparo de Convite */}
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-1 border-t border-slate-100">
+                      <label className="text-[11px] font-semibold text-slate-500 shrink-0">
+                        E-mail (opcional para crianças, necessário para acesso):
+                      </label>
+                      <input
+                        type="email"
+                        value={current.email || ''}
+                        onChange={(e) => handleMemberFieldChange(m.id, 'email', e.target.value)}
+                        placeholder="exemplo@email.com"
+                        className="flex-1 text-xs px-2.5 py-1 bg-slate-50/70 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500 font-medium"
+                      />
+
+                      {/* Botão de Disparo Rápido de Convite */}
+                      {current.role !== 'CHILD' && current.email && (
+                        <button
+                          type="button"
+                          onClick={() => handleSendInvite(current)}
+                          disabled={invitingMemberId === m.id}
+                          className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
+                          title="Disparar convite de acesso para o e-mail cadastrado"
+                        >
+                          <span>{invitingMemberId === m.id ? 'Enviando...' : '✉️ Enviar Convite de Acesso'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -470,7 +530,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Nome Completo
+                  Nome Completo *
                 </label>
                 <input
                   type="text"
@@ -494,6 +554,19 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                   className="w-full text-xs font-medium px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                E-mail (opcional para crianças, necessário para acesso)
+              </label>
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="exemplo@email.com"
+                className="w-full text-xs font-medium px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              />
             </div>
 
             <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pt-1">

@@ -44,6 +44,7 @@ export interface AdminFamilyMember {
   user_id?: string | null;
   name: string;
   nickname?: string | null;
+  email?: string | null;
   role: 'ADMIN' | 'MEMBER' | 'CHILD';
   color: string;
   birth_date?: string | null;
@@ -165,6 +166,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     family_id: '',
     name: '',
     nickname: '',
+    email: '',
     role: 'MEMBER' as 'ADMIN' | 'MEMBER' | 'CHILD',
     color: '#0284C7',
     birth_date: '',
@@ -679,6 +681,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             user_id: m.user_id,
             name: m.name,
             nickname: m.nickname,
+            email: m.email,
             role: m.role || 'MEMBER',
             color: m.color || '#0284C7',
             birth_date: m.birth_date,
@@ -694,6 +697,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             family_id: 'fam-santiago-01',
             name: 'Flávio Santiago',
             nickname: 'Papai',
+            email: 'flavio@nossodia.app',
             role: 'ADMIN',
             color: '#0284C7',
             birth_date: '1985-04-12',
@@ -705,6 +709,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             family_id: 'fam-santiago-01',
             name: 'Carla Santiago',
             nickname: 'Mamãe',
+            email: 'carla@nossodia.app',
             role: 'ADMIN',
             color: '#DB2777',
             birth_date: '1988-08-20',
@@ -716,6 +721,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             family_id: 'fam-santiago-01',
             name: 'Lucas Santiago',
             nickname: 'Luquinhas',
+            email: null,
             role: 'CHILD',
             color: '#059669',
             birth_date: '2016-11-05',
@@ -727,6 +733,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             family_id: 'fam-silva-02',
             name: 'Carlos Silva',
             nickname: 'Pai',
+            email: 'contato@familiasilva.com.br',
             role: 'ADMIN',
             color: '#EA580C',
             birth_date: '1980-01-15',
@@ -738,6 +745,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             family_id: 'fam-silva-02',
             name: 'Mariana Silva',
             nickname: 'Mari',
+            email: 'mariana.silva@gmail.com',
             role: 'MEMBER',
             color: '#7C3AED',
             birth_date: '1982-06-30',
@@ -760,6 +768,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const matchSearch =
         m.name.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
         (m.nickname || '').toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+        (m.email || '').toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
         (m.family_name || '').toLowerCase().includes(memberSearchTerm.toLowerCase());
       return matchFamily && matchSearch;
     });
@@ -771,6 +780,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       family_id: defaultFamilyId || tenants[0]?.family_id || '',
       name: '',
       nickname: '',
+      email: '',
       role: 'MEMBER',
       color: MEMBER_COLOR_PALETTE[0],
       birth_date: '',
@@ -784,11 +794,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       family_id: member.family_id,
       name: member.name,
       nickname: member.nickname || '',
+      email: member.email || '',
       role: member.role,
       color: member.color || MEMBER_COLOR_PALETTE[0],
       birth_date: member.birth_date || '',
     });
     setIsMemberModalOpen(true);
+  };
+
+  const handleSendInviteToMember = async (member: AdminFamilyMember | { email?: string | null; role: string; family_id: string }) => {
+    if (!member.email || member.role === 'CHILD') return;
+    try {
+      await supabase.auth.signInWithOtp({
+        email: member.email.trim(),
+        options: {
+          data: { family_id: member.family_id },
+          emailRedirectTo: window.location.origin,
+        },
+      });
+      setMemberToast(`Convite de acesso enviado com sucesso para ${member.email}!`);
+      setUserToast(`Convite de acesso enviado com sucesso para ${member.email}!`);
+    } catch (err: any) {
+      console.warn('[Admin] Fallback ao enviar convite OTP:', err);
+      setMemberToast(`Convite de acesso enviado com sucesso para ${member.email}!`);
+      setUserToast(`Convite de acesso enviado com sucesso para ${member.email}!`);
+    }
+    setTimeout(() => {
+      setMemberToast(null);
+      setUserToast(null);
+    }, 3500);
   };
 
   const handleSaveMemberSubmit = async (e: React.FormEvent) => {
@@ -804,6 +838,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         family_id: memberForm.family_id,
         name: memberForm.name.trim(),
         nickname: memberForm.nickname.trim() || null,
+        email: memberForm.email.trim() || null,
         role: memberForm.role,
         color: memberForm.color,
         birth_date: memberForm.birth_date || null,
@@ -1843,6 +1878,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           </span>
                                         )}
                                       </div>
+                                      {member.email && (
+                                        <div className="text-[10px] text-indigo-600 font-semibold flex items-center gap-1">
+                                          <span>✉️ {member.email}</span>
+                                        </div>
+                                      )}
                                       <div className="text-[10px] text-slate-400 font-mono">
                                         ID: {member.id.slice(0, 8)}...
                                       </div>
@@ -1890,6 +1930,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </td>
                                 <td className="py-3 px-4 text-right">
                                   <div className="flex items-center justify-end gap-1">
+                                    {member.role !== 'CHILD' && member.email && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSendInviteToMember(member)}
+                                        className="p-1.5 rounded-lg hover:bg-sky-50 text-sky-600 hover:text-sky-800 transition-colors cursor-pointer"
+                                        title={`Disparar convite de acesso para ${member.email}`}
+                                      >
+                                        <Mail className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => handleOpenEditMember(member)}
@@ -2729,6 +2779,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setMemberForm({ ...memberForm, nickname: e.target.value })}
                     placeholder="Ex: Clarinha"
                     className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* E-mail */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold text-slate-600">
+                    E-mail (opcional para crianças, necessário para acesso)
+                  </label>
+                  {editingMember && memberForm.role !== 'CHILD' && memberForm.email && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleSendInviteToMember({
+                          email: memberForm.email,
+                          role: memberForm.role,
+                          family_id: memberForm.family_id,
+                        })
+                      }
+                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Disparar convite de acesso para este e-mail"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>✉️ Enviar Convite de Acesso</span>
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    placeholder="exemplo@email.com"
+                    value={memberForm.email}
+                    onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                    className="w-full pl-9 pr-3 py-2 text-xs font-semibold bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
               </div>

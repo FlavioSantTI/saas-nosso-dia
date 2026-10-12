@@ -13,6 +13,7 @@ export interface FamilyMember {
   user_id?: string | null;
   name: string;
   nickname?: string | null;
+  email?: string | null;
   role: MemberRole;
   color: string;
   birth_date?: string | null;

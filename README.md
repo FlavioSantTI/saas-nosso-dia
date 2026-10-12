@@ -191,6 +191,19 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ### [v1.5.1] — 2026-10-12
+#### ✉️ E-mail em Perfis Familiares & Disparo Rápido de Convites
+- **Campo de E-mail no Cadastro/Edição de Membros (`FamilyMember`):**
+  - Adicionado suporte a `email?: string | null` nos tipos do TypeScript e coluna `email TEXT` na tabela `public.family_members`.
+  - Formulário intuitivo nos modais (`FamilyManageModal.tsx` e `/admin`):
+    - Label explicativa: *"E-mail (opcional para crianças, necessário para acesso)"*.
+    - Input otimizado para e-mail com placeholder demonstrativo.
+- **Botão de Disparo Rápido de Convite (`[ ✉️ Enviar Convite de Acesso ]`):**
+  - Exibido para membros adultos (`role !== 'CHILD'`) que possuem e-mail informado.
+  - Integração com Supabase OTP (`supabase.auth.signInWithOtp({ email, options: { data: { family_id } } })`), disparando link mágico diretamente para a caixa de entrada do membro.
+  - Feedback visual imediato com Toast verde de sucesso: *"Convite de acesso enviado com sucesso para [e-mail]!"*.
+- **Migration SQL:**
+  - `20261012000002_add_email_to_family_members.sql`: Adiciona coluna `email` com índice de busca em `family_members`.
+
 #### 👥 Painel de Gestão e Acessos de Usuários no Super-Admin (`/admin`)
 - **Nova Aba "Gestão de Usuários" (`AdminDashboard.tsx`):**
   - Adicionada aba dedicada **`[ 👥 Gestão de Usuários ]`** no topo do painel administrativo.

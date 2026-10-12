@@ -815,6 +815,7 @@ export const App: React.FC = () => {
   const handleAddMember = async (memberData: {
     name: string;
     nickname?: string | null;
+    email?: string | null;
     role: MemberRole;
     color: string;
   }) => {
@@ -825,6 +826,7 @@ export const App: React.FC = () => {
         family_id: family.id,
         name: memberData.name,
         nickname: memberData.nickname?.trim() || null,
+        email: memberData.email?.trim() || null,
         role: memberData.role,
         color: memberData.color
       })
@@ -845,6 +847,7 @@ export const App: React.FC = () => {
       .update({
         name: updatedMember.name,
         nickname: updatedMember.nickname?.trim() || null,
+        email: updatedMember.email?.trim() || null,
         role: updatedMember.role,
         color: updatedMember.color
       })
