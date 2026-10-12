@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.5.1-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.5.5-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,40 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.5.5] — 2026-10-12
+#### 🚀 Landing Page Pública & Roteamento de Entrada Inteligente
+- **Nova Landing Page Pública (`LandingPage.tsx`):**
+  - Porta de entrada pública moderna e acolhedora projetada para apresentar a proposta de valor do Nosso Dia e converter visitantes em degustações de 14 dias sem cartão de crédito.
+  - Aderente às diretrizes de acessibilidade WCAG AA (contraste mínimo 4,5:1), mobile-first em 375px sem scroll lateral e navegação fluida por teclado (`Tab`, `Enter`, `Espaço`, `Esc`).
+  - **9 Seções Semânticas Estruturadas:**
+    1. **Header Público:** Logo oficial, links âncora com rolagem suave (`#como-funciona`, `#recursos`, `#planos`, `#duvidas`), botão *"Já sou cadastrado"* e menu hambúrguer responsivo para smartphones.
+    2. **Hero Section:** HeroBadge com ícone, `<h1>` único de alto impacto, subtítulo explicativo, CTA primário *"Experimente grátis por 14 dias"*, microcopy de PWA e maquete visual ilustrativa da grade semanal com dados didáticos genéricos (sem dados reais de crianças).
+    3. **A Dor Familiar:** Três cards acolhedores (*Recados escolares esquecidos*, *Desencontro de caronas* e *Sobrecarga mental concentrada*).
+    4. **Os Três Pilares da Solução:** *Semana em foco* (ciclos de 7 dias), *Responsabilidade definida por compromisso* (quem leva e quem busca) e *Alertas antes dos conflitos*.
+    5. **Recursos:** Grid interativo destacando o Kanban semanal, Briefing matinal diário, Captura rápida com Inteligência Artificial e Lembretes locais.
+    6. **Catálogo de Planos (#planos):** Consulta assíncrona ao Supabase com fallback de resiliência de 3s (`FALLBACK_PLANS`), cartões dinâmicos com créditos de IA (`⚡ [X] Créditos de IA / mês`), selos de mídia com ícones do Lucide (`Texto`, `Voz`, `Fotos`, `PDFs`), preços formatados em BRL e botões diretos de adesão.
+    7. **Privacidade & Conformidade LGPD:** Box de destaque com ícone `ShieldCheck`, compromisso com criptografia e isolamento hermético via Row Level Security (RLS), com link para minuta marcada como `[PENDENTE REVISÃO JURÍDICA]`.
+    8. **FAQ Acessível:** Acordeão dinâmico com 5 respostas diretas para as dúvidas mais frequentes dos pais, com suporte a teclado e telemetria de abertura (`faq_open`).
+    9. **Rodapé Oficial:** Copyright 2026, menção à Software House Agêntica e links para políticas legais.
+  - **Sticky Bar Mobile:** Botão inferior fixo com ação rápida *"Experimente grátis"* ativado contextualmente ao rolar a página em smartphones.
+  - **Telemetria / Eventos de Interação:** Disparo de eventos `login_header_click`, `cta_hero_click`, `cta_planos_click` e `faq_open`.
+
+- **Roteamento de Entrada Inteligente (`App.tsx`):**
+  - **Carregamento Inicial Neutro:** Tela de espera anti-flash com spinner sobre fundo suave (`#F4F8FA`), garantindo que nem a landing nem o painel sejam renderizados antes da checagem de sessão do Supabase Auth.
+  - **Visitantes Não Autenticados:** Renderização da Landing Page pública com acionamento do `AuthModal` sob demanda nas abas corretas (`login` ou `register`).
+  - **Preservação de Convite Familiar:** O parâmetro de query string `?invite=...` é preservado intacto na URL até que o usuário conclua seu fluxo de cadastro.
+  - **Usuários Autenticados Sem Família:** Encaminhamento estrito e mandatório para o fluxo de `Onboarding` (criação de família). Estes usuários nunca visualizam a Landing Page pública.
+  - **Usuários Autenticados Com Família:** Acesso direto e inalterado ao painel semanal da família (`WeekView`, `BriefingCard`, etc.).
+
+- **SEO & Metadados (`index.html`):**
+  - Título otimizado: `Nosso Dia — A Central Inteligente da Rotina Familiar`.
+  * Meta description para conversão em buscadores.
+  - Tags OpenGraph completas (1200x630, locale `pt_BR`) e Twitter Card para visualização enriquecida no WhatsApp, Facebook e redes sociais.
+
+- **Resiliência e Constantes (`plans.ts`):**
+  - Criação de `apps/web/src/constants/plans.ts` com tipagem `LandingPlan` e fallback resiliente dos planos comerciais (Degustação, Família Essencial, Família Pro IA e Família Pro IA Anual).
+- **Rótulo Global de Versão:** Atualizado para `v1.5.5` no rodapé da aplicação e no `package.json`.
 
 ### [v1.5.1] — 2026-10-12
 #### ✉️ E-mail em Perfis Familiares & Disparo Rápido de Convites

@@ -19,6 +19,7 @@ import { supabase } from './lib/supabase';
 import { startNotificationScheduler, requestNotificationPermission } from './lib/notifications';
 import { getMemberDisplayName } from './lib/formatters';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { LandingPage } from './components/LandingPage';
 
 const formatDateToYYYYMMDD = (d: Date): string => {
   const y = d.getFullYear();
@@ -502,8 +503,8 @@ export const App: React.FC = () => {
         return;
       }
 
-      // Se entrou por invite, podemos remover o parametro da url para manter limpo
-      if (joinFamilyId) {
+      // Se entrou por invite, podemos remover o parametro da url após autenticação confirmada
+      if (joinFamilyId && sessionUser) {
         window.history.replaceState({}, '', window.location.pathname);
       }
 
@@ -1412,50 +1413,86 @@ export const App: React.FC = () => {
     setIsManualAddOpen(false);
   };
 
-  // 1. Tela de Carregamento Inicial
-  if (isInitialLoading && !currentUser && !family) {
+  // 1. Tela de Carregamento Inicial Neutra (evita qualquer flash de tela antes da verificação da sessão)
+  if (isInitialLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white gap-3">
-        <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-        <span className="text-xs font-semibold tracking-wide text-slate-300">
+      <div className="min-h-screen bg-[#F4F8FA] flex flex-col items-center justify-center text-slate-600 gap-3">
+        <div className="w-9 h-9 border-3 border-sky-600 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs font-semibold tracking-wide text-slate-500">
           Carregando Nosso Dia...
         </span>
       </div>
     );
   }
 
-  // 2. Fluxo Deslogado / Autenticação (quando não houver sessão ativa ou família carregada)
-  if (!currentUser || !family) {
+  // 2. Usuário NÃO LOGADO: Renderiza a Landing Page Pública com o AuthModal sob demanda
+  if (!currentUser) {
     if (authView === 'onboarding') {
       return (
         <Onboarding
           onComplete={handleCreateFamily}
-          onOpenAuth={() => setAuthView('login')}
+          onOpenAuth={() => {
+            setAuthView('login');
+            setIsAuthModalOpen(true);
+          }}
         />
       );
     }
 
-    // Tela padrão de entrada: Tela limpa de LOGIN (E-mail e Senha) com link discreto para Criar Família
     return (
-      <AuthModal
-        isOpen={true}
-        isStandalone={true}
-        initialTab={authView === 'signup' ? 'register' : 'login'}
-        onClose={() => {}}
-        inviteFamilyId={inviteFamilyId}
-        family={family}
-        members={members}
-        onSwitchToOnboarding={() => setAuthView('onboarding')}
-        onAuthSuccess={(user, linkedMember) => {
-          setCurrentUser(user);
-          if (linkedMember) {
-            setCurrentMember(linkedMember);
-          }
-          loadData();
-        }}
+      <>
+        <LandingPage
+          onOpenLogin={() => {
+            setAuthView('login');
+            setIsAuthModalOpen(true);
+          }}
+          onOpenSignup={() => {
+            setAuthView('signup');
+            setIsAuthModalOpen(true);
+          }}
+          onSelectPlan={(_planSlug) => {
+            setAuthView('signup');
+            setIsAuthModalOpen(true);
+          }}
+        />
+
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          isStandalone={false}
+          initialTab={authView === 'signup' ? 'register' : 'login'}
+          onClose={() => setIsAuthModalOpen(false)}
+          inviteFamilyId={inviteFamilyId}
+          family={family}
+          members={members}
+          onSwitchToOnboarding={() => {
+            setIsAuthModalOpen(false);
+            setAuthView('onboarding');
+          }}
+          onAuthSuccess={(user, linkedMember) => {
+            setCurrentUser(user);
+            if (linkedMember) {
+              setCurrentMember(linkedMember);
+            }
+            setIsAuthModalOpen(false);
+            loadData();
+          }}
+        />
+      </>
+    );
+  }
+
+  // 3. Usuário LOGADO SEM família ativa: Renderiza fluxo de criação/entrada em família (Onboarding)
+  // REGRA RESTRITA: NUNCA envie este usuário logado para a landing page.
+  if (!family) {
+    return (
+      <Onboarding
+        onComplete={handleCreateFamily}
+        onOpenAuth={handleLogout}
       />
     );
   }
+
+  // 4. Usuário LOGADO COM família ativa: Renderiza o painel semanal existente sem alterações
 
   const unassignedCount = events.filter((e) => !e.responsible_id).length;
 
@@ -1610,7 +1647,7 @@ export const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="flex items-center gap-1.5 font-medium">
             <span className="font-bold text-slate-800">Nosso Dia</span>
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.5.1</span>
+            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.5.5</span>
           </p>
 
           <div className="flex items-center gap-4">
