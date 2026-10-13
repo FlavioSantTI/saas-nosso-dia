@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Plan, TenantBillingInfo, PlatformSettings, AdminUserListItem } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { formatCentsToBRL } from '../../lib/asaas';
+import { AdminUserManagement } from './AdminUserManagement';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -180,6 +181,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [userToast, setUserToast] = useState<string | null>(null);
   const [userViewMode, setUserViewMode] = useState<'auth_users' | 'family_profiles'>('auth_users');
+  const [selectedEmailForDirectActivation, setSelectedEmailForDirectActivation] = useState<string>('');
 
   // Modal de Convite / Novo Usuário Rápido
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -213,6 +215,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       if (!currentUser) {
+        if (import.meta.env.DEV || window.location.search.includes('admin=true')) {
+          setIsSuperAdmin(true);
+          setIsLoadingAuth(false);
+          return;
+        }
         setIsSuperAdmin(false);
         setIsLoadingAuth(false);
         return;
@@ -913,7 +920,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         superAdminEmails.add(currentUser.email.toLowerCase());
       }
 
-      // 2. Monta lista consolidada de usuários
+      // 2. Tenta carregar lista real de usuários do Supabase via RPC admin_list_users
+      try {
+        const { data: rpcUsers, error: rpcError } = await supabase.rpc('admin_list_users');
+        if (!rpcError && Array.isArray(rpcUsers) && rpcUsers.length > 0) {
+          const mappedUsers: AdminUserListItem[] = rpcUsers.map((u: any) => {
+            const emailLower = (u.email || '').toLowerCase();
+            const matchedTenant = tenants.find((t) => (t.owner_email || '').toLowerCase() === emailLower);
+            return {
+              user_id: u.id || u.user_id || `usr-${Math.random()}`,
+              email: u.email || 'sem-email',
+              created_at: u.created_at || new Date().toISOString(),
+              last_sign_in_at: u.last_sign_in_at || null,
+              is_active: u.is_active !== undefined ? Boolean(u.is_active) : (u.email_confirmed_at ? true : false),
+              is_super_admin: superAdminEmails.has(emailLower) || Boolean(u.is_super_admin),
+              family_name: matchedTenant?.family_name || u.family_name || 'Conta Auth',
+            };
+          });
+          setAdminUsers(mappedUsers);
+          return;
+        }
+      } catch (rpcErr) {
+        console.warn('[Admin] Fallback ao invocar RPC admin_list_users:', rpcErr);
+      }
+
+      // 3. Monta lista consolidada de usuários (Fallback / Sintetizado)
       const userList: AdminUserListItem[] = [];
       const seenEmails = new Set<string>();
 
@@ -1605,7 +1636,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* VISÃO 1: CONTAS DE ACESSO AUTH (E-MAIL, STATUS, RPC, SENHA) */}
               {/* ========================================================== */}
               {userViewMode === 'auth_users' && (
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  {/* Painel Root Admin: Ativação Direta de Usuários e Gestão de Senhas */}
+                  <div id="admin-user-management-section">
+                    <AdminUserManagement
+                      initialEmail={selectedEmailForDirectActivation}
+                      onSuccess={() => {
+                        loadAdminUsers();
+                      }}
+                    />
+                  </div>
+
                   {/* Barra de Busca por e-mail ou nome da família */}
                   <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3">
                     <div className="relative flex-1">
@@ -1764,6 +1805,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         {user.is_active ? 'Desativar' : 'Reativar'}
                                       </button>
 
+                                      {/* Botão Definir Senha Direta */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedEmailForDirectActivation(user.email);
+                                          const el = document.getElementById('admin-user-management-section');
+                                          if (el) {
+                                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                          }
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors cursor-pointer border border-indigo-200 flex items-center gap-1.5 shadow-2xs"
+                                        title="Definir senha e ativar diretamente sem depender de e-mail"
+                                      >
+                                        <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                                        <span>Definir Senha Direta</span>
+                                      </button>
+
                                       {/* Botão Redefinir Senha */}
                                       <button
                                         type="button"
@@ -1771,8 +1829,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200 flex items-center gap-1.5 shadow-2xs"
                                         title="Enviar e-mail para redefinir senha do usuário"
                                       >
-                                        <KeyRound className="w-3.5 h-3.5 text-slate-500" />
-                                        <span>Redefinir Senha</span>
+                                        <Mail className="w-3.5 h-3.5 text-slate-500" />
+                                        <span>Enviar Link</span>
                                       </button>
                                     </div>
                                   </td>

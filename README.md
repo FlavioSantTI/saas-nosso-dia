@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.5.5-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.5.6-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,34 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.5.6] — 2026-10-13
+#### 🔑 Painel Root Admin: Ativação Direta de Usuários & Gestão de Senhas
+- **Novo Componente de Gestão Direta (`AdminUserManagement.tsx`):**
+  - Permite ao Root Super-Admin ativar contas, redefinir senhas e criar acessos imediatos para usuários sem depender de links ou e-mails de confirmação.
+  - **Formulário Ágil de Credenciais:**
+    - Campo de e-mail com validação rigorosa de formato e sanitização `.trim()`.
+    - Campo de nova senha exibido visível por padrão (com alternador de visibilidade `Eye` / `EyeOff`) para conferência antes do compartilhamento.
+    - Botão **"Gerar Senha Fácil" / "Sugerir Senha Amigável"** com rotação de senhas amigáveis e seguras (ex.: `NossoDia2026!`, `Familia2026!`, `AcessoFacil26`, `RotinaLeve26!`, `VidaFeliz2026!`).
+    - Botão **"Ativar & Definir Senha"** disparando a RPC segura `admin_set_user_credentials` no Supabase com indicador de carregamento e travamento contra cliques duplicados.
+  - **Card de Sucesso & Compartilhamento via WhatsApp:**
+    - Exibição de card visual confirmando a ativação instantânea com dados de acesso.
+    - Botão **"📋 Copiar Acesso para WhatsApp"** que copia a mensagem oficial padronizada para a área de transferência:
+      ```text
+      Oi! Já deixei seu acesso pronto no Nosso Dia.
+
+      📱 Link: https://nossodia.flaviosantiago.com.br
+      📧 E-mail: {email}
+      🔑 Senha: {password}
+
+      É só abrir o link, colocar esse e-mail e senha e entrar. Não precisa confirmar nada no e-mail!
+      ```
+    - Ação auxiliar para abrir o WhatsApp Web diretamente com mensagem pré-preenchida e botão para cópia rápida apenas da senha.
+- **Integração no Painel Administrativo (`AdminDashboard.tsx`):**
+  - Módulo posicionado no topo da aba *"👥 Gestão de Usuários > Contas de Acesso (Auth & Login)"*.
+  - Adoção prioritária da RPC `admin_list_users()` na listagem de usuários do banco, trazendo registros reais de `auth.users` com fallback resiliente.
+  - Adicionado botão **"🔑 Definir Senha Direta"** por linha da tabela de usuários, preenchendo o formulário superior e rolando a tela suavemente para a ação.
+- **Rótulo Global de Versão:** Atualizado para `v1.5.6` no rodapé da aplicação, no `package.json` e no `README.md`.
 
 ### [v1.5.5] — 2026-10-12
 #### 🚀 Landing Page Pública & Roteamento de Entrada Inteligente
