@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { EventItem, FamilyMember } from '../types';
 import { getMemberDisplayName } from '../lib/formatters';
+import { extractLiteralDate, extractLiteralTime, parseSafeLocalDate } from '../lib/dateUtils';
 
 interface UnassignedActivitiesModalProps {
   isOpen: boolean;
@@ -30,17 +31,24 @@ export const UnassignedActivitiesModal: React.FC<UnassignedActivitiesModalProps>
   const unassignedEvents = events.filter((e) => !e.responsible_id);
   const adultMembers = members.filter((m) => m.role === 'ADMIN' || m.role === 'MEMBER');
 
-  const formatEventDate = (isoString: string) => {
-    const d = new Date(isoString);
-    const weekday = d.toLocaleDateString('pt-BR', { weekday: 'short', timeZone: 'UTC' });
-    const dayMonth = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
-    return `${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${dayMonth}`;
+  const formatEventDate = (raw: string) => {
+    try {
+      const dateStr = extractLiteralDate(raw);
+      const [y, m, d] = dateStr.split('-');
+      if (!y || !m || !d) return '--/--';
+      const safeMidday = parseSafeLocalDate(dateStr);
+      const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      const weekday = weekdays[safeMidday.getDay()] || '';
+      return `${weekday}, ${d}/${m}`;
+    } catch {
+      return '--/--';
+    }
   };
 
   const formatTimeRange = (startIso: string, endIso: string, isAllDay?: boolean) => {
     if (isAllDay) return '📌 Dia Inteiro';
-    const s = new Date(startIso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
-    const e = new Date(endIso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    const s = extractLiteralTime(startIso);
+    const e = extractLiteralTime(endIso);
     return `${s} - ${e}`;
   };
 

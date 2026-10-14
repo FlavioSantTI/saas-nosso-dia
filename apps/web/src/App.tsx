@@ -21,12 +21,18 @@ import { getMemberDisplayName } from './lib/formatters';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { LandingPage } from './components/LandingPage';
 import { sanitizeTitle } from './lib/sanitize';
+import {
+  extractLiteralDate,
+  extractLiteralTime,
+  toLocalDateString,
+  parseSafeLocalDate,
+  buildNominalTimestamp,
+  buildNominalEndTimestamp,
+  deduplicateAndCleanEvents,
+} from './lib/dateUtils';
 
 const formatDateToYYYYMMDD = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return toLocalDateString(d);
 };
 
 // Gera todas as ocorrências (YYYY-MM-DD) para os dias da semana selecionados (0=Dom... 6=Sáb) nos próximos N dias
@@ -41,10 +47,8 @@ const generateRoutineOccurrences = (
 
   let maxDate: Date | null = null;
   if (endDateStr) {
-    const [ey, em, ed] = endDateStr.split('-').map(Number);
-    if (ey && em && ed) {
-      maxDate = new Date(ey, em - 1, ed, 23, 59, 59);
-    }
+    const endParsed = parseSafeLocalDate(endDateStr);
+    maxDate = new Date(endParsed.getFullYear(), endParsed.getMonth(), endParsed.getDate(), 23, 59, 59);
   }
 
   for (let i = 0; i < totalDays; i++) {
@@ -54,7 +58,7 @@ const generateRoutineOccurrences = (
     }
     const dayOfWeek = current.getDay();
     if (daysOfWeek.includes(dayOfWeek)) {
-      dates.push(formatDateToYYYYMMDD(current));
+      dates.push(toLocalDateString(current));
     }
   }
 
@@ -64,52 +68,39 @@ const generateRoutineOccurrences = (
 const getVisibleRange = (date: Date, mode: CalendarViewMode) => {
   const d = new Date(date);
   if (mode === 'day') {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const dayStr = toLocalDateString(d);
     return {
-      start: `${y}-${m}-${day}T00:00:00.000Z`,
-      end: `${y}-${m}-${day}T23:59:59.999Z`,
+      start: `${dayStr}T00:00:00`,
+      end: `${dayStr}T23:59:59`,
     };
   } else if (mode === 'week') {
     const monday = getMonday(d);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
+    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6, 12, 0, 0);
 
-    const y1 = monday.getFullYear();
-    const m1 = String(monday.getMonth() + 1).padStart(2, '0');
-    const d1 = String(monday.getDate()).padStart(2, '0');
-
-    const y2 = sunday.getFullYear();
-    const m2 = String(sunday.getMonth() + 1).padStart(2, '0');
-    const d2 = String(sunday.getDate()).padStart(2, '0');
+    const m1 = toLocalDateString(monday);
+    const d2 = toLocalDateString(sunday);
 
     return {
-      start: `${y1}-${m1}-${d1}T00:00:00.000Z`,
-      end: `${y2}-${m2}-${d2}T23:59:59.999Z`,
+      start: `${m1}T00:00:00`,
+      end: `${d2}T23:59:59`,
     };
   } else {
     // Modo mês: inclui dias do mês anterior e próximo mostrados na grade (com folga de 7 dias)
     const year = d.getFullYear();
     const month = d.getMonth();
 
-    const startObj = new Date(year, month, 1);
+    const startObj = new Date(year, month, 1, 12, 0, 0);
     startObj.setDate(startObj.getDate() - 7);
 
-    const endObj = new Date(year, month + 1, 0);
+    const endObj = new Date(year, month + 1, 0, 12, 0, 0);
     endObj.setDate(endObj.getDate() + 7);
 
-    const y1 = startObj.getFullYear();
-    const m1 = String(startObj.getMonth() + 1).padStart(2, '0');
-    const d1 = String(startObj.getDate()).padStart(2, '0');
-
-    const y2 = endObj.getFullYear();
-    const m2 = String(endObj.getMonth() + 1).padStart(2, '0');
-    const d2 = String(endObj.getDate()).padStart(2, '0');
+    const m1 = toLocalDateString(startObj);
+    const d2 = toLocalDateString(endObj);
 
     return {
-      start: `${y1}-${m1}-${d1}T00:00:00.000Z`,
-      end: `${y2}-${m2}-${d2}T23:59:59.999Z`,
+      start: `${m1}T00:00:00`,
+      end: `${d2}T23:59:59`,
     };
   }
 };
@@ -128,12 +119,8 @@ const getWeekDateMap = (refDate: Date): Record<string, string> => {
   ];
 
   dayKeys.forEach(({ keys, offset }) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + offset);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const dateStr = `${y}-${m}-${day}`;
+    const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + offset, 12, 0, 0);
+    const dateStr = toLocalDateString(d);
     keys.forEach((k) => {
       map[k] = dateStr;
     });
@@ -141,71 +128,71 @@ const getWeekDateMap = (refDate: Date): Record<string, string> => {
   return map;
 };
 
-// Varredura e sincronização em lote de rotinas ativas para a janela visível e próximos 90 dias
+// Varredura ágil e sincronização de rotinas ativas para a janela visível (+ margem de 7 dias)
 const ensureRoutineEvents = async (
   familyId: string,
-  visibleRange: { start: string; end: string }
+  visibleRange: { start: string; end: string },
+  preloadedRoutines?: any[]
 ): Promise<any[]> => {
   try {
-    // 1. Busca rotinas ativas da família
-    const { data: routines, error: routErr } = await supabase
-      .from('routines')
-      .select('*')
-      .eq('family_id', familyId)
-      .eq('is_active', true);
+    // 1. Reutiliza rotinas já carregadas na memória ou busca ativas da família
+    let routines = preloadedRoutines;
+    if (!routines) {
+      const { data: routs, error: routErr } = await supabase
+        .from('routines')
+        .select('*')
+        .eq('family_id', familyId)
+        .eq('is_active', true);
+      if (routErr || !routs) return [];
+      routines = routs;
+    } else {
+      routines = routines.filter((r) => r.is_active !== false);
+    }
 
-    if (routErr || !routines || routines.length === 0) {
+    if (!routines || routines.length === 0) {
       return [];
     }
 
-    // 2. Determina a janela de verificação (janela visível + 90 dias a partir de hoje)
-    const today = new Date();
-    const visStart = new Date(visibleRange.start);
-    const visEnd = new Date(visibleRange.end);
+    // 2. Determina janela de verificação restrita usando datas nominais locais
+    const todayStr = toLocalDateString();
+    const visStartStr = extractLiteralDate(visibleRange.start) || todayStr;
+    const visEndStr = extractLiteralDate(visibleRange.end) || todayStr;
 
-    const scanStart = new Date(
-      Math.min(
-        new Date(visStart.getFullYear(), visStart.getMonth(), visStart.getDate(), 12, 0, 0).getTime(),
-        new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0).getTime()
-      )
-    );
+    const startDate = parseSafeLocalDate(visStartStr < todayStr ? visStartStr : todayStr);
+    const endDate = parseSafeLocalDate(visEndStr);
+    endDate.setDate(endDate.getDate() + 7);
 
-    const ninetyDaysAhead = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 90, 23, 59, 59);
-    const scanEnd = new Date(
-      Math.max(
-        new Date(visEnd.getFullYear(), visEnd.getMonth(), visEnd.getDate(), 23, 59, 59).getTime(),
-        ninetyDaysAhead.getTime()
-      )
-    );
+    const scanStartStr = toLocalDateString(startDate);
+    const scanEndStr = toLocalDateString(endDate);
 
     // 3. Busca eventos existentes no intervalo de varredura
     const { data: existingEvents } = await supabase
       .from('events')
       .select('id, routine_id, title, start_time')
       .eq('family_id', familyId)
-      .gte('start_time', scanStart.toISOString())
-      .lte('start_time', scanEnd.toISOString());
+      .gte('start_time', `${scanStartStr}T00:00:00`)
+      .lte('start_time', `${scanEndStr}T23:59:59`);
 
-    // Cria conjunto de chaves para lookup O(1)
+    // Cria conjunto de chaves literais para lookup O(1)
     const existingKeySet = new Set<string>();
     (existingEvents || []).forEach((ev) => {
-      const d = new Date(ev.start_time);
-      const y = d.getUTCFullYear();
-      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(d.getUTCDate()).padStart(2, '0');
-      const dateKey = `${y}-${m}-${day}`;
+      const dateKey = extractLiteralDate(ev.start_time);
+      const timeKey = extractLiteralTime(ev.start_time);
+      const cleanTitle = (ev.title || '').trim().toLowerCase();
 
       if (ev.routine_id) {
+        existingKeySet.add(`${ev.routine_id}_${dateKey}_${timeKey}`);
         existingKeySet.add(`${ev.routine_id}_${dateKey}`);
       }
       if (ev.title) {
-        existingKeySet.add(`${ev.title.trim().toLowerCase()}_${dateKey}`);
+        existingKeySet.add(`${cleanTitle}_${dateKey}_${timeKey}`);
+        existingKeySet.add(`${cleanTitle}_${dateKey}`);
       }
     });
 
     // 4. Calcula os eventos ausentes para cada rotina ativa
     const missingEventsToInsert: any[] = [];
-    const totalDaysToScan = Math.ceil((scanEnd.getTime() - scanStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const totalDaysToScan = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     for (const routine of routines) {
       const routineDays: number[] = routine.days_of_week || [];
@@ -213,29 +200,38 @@ const ensureRoutineEvents = async (
 
       const targetDates = generateRoutineOccurrences(
         routineDays,
-        scanStart,
+        startDate,
         totalDaysToScan,
         routine.end_date
       );
 
-      const [hours, minutes] = (routine.start_time || '12:00').split(':').map(Number);
       const durationMinutes = routine.duration_minutes || 60;
+      const routineStartTime = extractLiteralTime(routine.start_time) === '--:--'
+        ? (routine.start_time || '08:00')
+        : extractLiteralTime(routine.start_time);
+      const cleanRoutineTitle = (routine.title || '').trim().toLowerCase();
 
       for (const dateStr of targetDates) {
-        const routineDateKey = `${routine.id}_${dateStr}`;
-        const titleDateKey = `${routine.title.trim().toLowerCase()}_${dateStr}`;
+        const routineDateKey = `${routine.id}_${dateStr}_${routineStartTime}`;
+        const titleDateKey = `${cleanRoutineTitle}_${dateStr}_${routineStartTime}`;
+        const fallbackRoutineKey = `${routine.id}_${dateStr}`;
+        const fallbackTitleKey = `${cleanRoutineTitle}_${dateStr}`;
 
-        if (!existingKeySet.has(routineDateKey) && !existingKeySet.has(titleDateKey)) {
-          const evStart = new Date(`${dateStr}T00:00:00Z`);
-          evStart.setUTCHours(hours || 0, minutes || 0, 0, 0);
-          const evEnd = new Date(evStart.getTime() + durationMinutes * 60 * 1000);
+        if (
+          !existingKeySet.has(routineDateKey) &&
+          !existingKeySet.has(titleDateKey) &&
+          !existingKeySet.has(fallbackRoutineKey) &&
+          !existingKeySet.has(fallbackTitleKey)
+        ) {
+          const startIso = buildNominalTimestamp(dateStr, routineStartTime);
+          const endIso = buildNominalEndTimestamp(dateStr, routineStartTime, durationMinutes);
 
           missingEventsToInsert.push({
             family_id: familyId,
             routine_id: routine.id,
             title: routine.title,
-            start_time: evStart.toISOString(),
-            end_time: evEnd.toISOString(),
+            start_time: startIso,
+            end_time: endIso,
             is_all_day: false,
             location_id: routine.location_id,
             responsible_id: routine.default_responsible_id,
@@ -245,6 +241,8 @@ const ensureRoutineEvents = async (
           // Registra para evitar duplicar na mesma execução
           existingKeySet.add(routineDateKey);
           existingKeySet.add(titleDateKey);
+          existingKeySet.add(fallbackRoutineKey);
+          existingKeySet.add(fallbackTitleKey);
         }
       }
     }
@@ -273,12 +271,109 @@ const ensureRoutineEvents = async (
   }
 };
 
+// Sincronização em segundo plano para 90 dias futuros (não bloqueia a UI inicial)
+const syncFutureRoutinesInBackground = async (familyId: string, routines: any[]) => {
+  try {
+    const activeRoutines = (routines || []).filter((r) => r.is_active !== false);
+    if (activeRoutines.length === 0) return;
+
+    const today = new Date();
+    const todayStr = toLocalDateString(today);
+    const ninetyDaysAhead = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 90, 12, 0, 0);
+    const ninetyDaysStr = toLocalDateString(ninetyDaysAhead);
+
+    const { data: existingEvents } = await supabase
+      .from('events')
+      .select('routine_id, title, start_time')
+      .eq('family_id', familyId)
+      .gte('start_time', `${todayStr}T00:00:00`)
+      .lte('start_time', `${ninetyDaysStr}T23:59:59`);
+
+    const existingKeySet = new Set<string>();
+    (existingEvents || []).forEach((ev) => {
+      const dateKey = extractLiteralDate(ev.start_time);
+      const timeKey = extractLiteralTime(ev.start_time);
+      const cleanTitle = (ev.title || '').trim().toLowerCase();
+
+      if (ev.routine_id) {
+        existingKeySet.add(`${ev.routine_id}_${dateKey}_${timeKey}`);
+        existingKeySet.add(`${ev.routine_id}_${dateKey}`);
+      }
+      if (ev.title) {
+        existingKeySet.add(`${cleanTitle}_${dateKey}_${timeKey}`);
+        existingKeySet.add(`${cleanTitle}_${dateKey}`);
+      }
+    });
+
+    const missingEventsToInsert: any[] = [];
+    const totalDaysToScan = 91;
+
+    for (const routine of activeRoutines) {
+      const routineDays: number[] = routine.days_of_week || [];
+      if (routineDays.length === 0) continue;
+
+      const targetDates = generateRoutineOccurrences(
+        routineDays,
+        today,
+        totalDaysToScan,
+        routine.end_date
+      );
+
+      const durationMinutes = routine.duration_minutes || 60;
+      const routineStartTime = extractLiteralTime(routine.start_time) === '--:--'
+        ? (routine.start_time || '08:00')
+        : extractLiteralTime(routine.start_time);
+      const cleanRoutineTitle = (routine.title || '').trim().toLowerCase();
+
+      for (const dateStr of targetDates) {
+        const routineDateKey = `${routine.id}_${dateStr}_${routineStartTime}`;
+        const titleDateKey = `${cleanRoutineTitle}_${dateStr}_${routineStartTime}`;
+        const fallbackRoutineKey = `${routine.id}_${dateStr}`;
+        const fallbackTitleKey = `${cleanRoutineTitle}_${dateStr}`;
+
+        if (
+          !existingKeySet.has(routineDateKey) &&
+          !existingKeySet.has(titleDateKey) &&
+          !existingKeySet.has(fallbackRoutineKey) &&
+          !existingKeySet.has(fallbackTitleKey)
+        ) {
+          const startIso = buildNominalTimestamp(dateStr, routineStartTime);
+          const endIso = buildNominalEndTimestamp(dateStr, routineStartTime, durationMinutes);
+
+          missingEventsToInsert.push({
+            family_id: familyId,
+            routine_id: routine.id,
+            title: routine.title,
+            start_time: startIso,
+            end_time: endIso,
+            is_all_day: false,
+            location_id: routine.location_id,
+            responsible_id: routine.default_responsible_id,
+            status: 'SCHEDULED',
+          });
+
+          existingKeySet.add(routineDateKey);
+          existingKeySet.add(titleDateKey);
+          existingKeySet.add(fallbackRoutineKey);
+          existingKeySet.add(fallbackTitleKey);
+        }
+      }
+    }
+
+    if (missingEventsToInsert.length > 0) {
+      await supabase.from('events').insert(missingEventsToInsert);
+    }
+  } catch (err) {
+    console.warn('[BackgroundSync] Falha silenciosa na sincronização em segundo plano:', err);
+  }
+};
+
 export const App: React.FC = () => {
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [currentDate, setCurrentDate] = useState<Date>(() => new Date('2026-10-05T12:00:00Z'));
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
@@ -345,42 +440,23 @@ export const App: React.FC = () => {
       }
 
       try {
-        // Consulta se user.id existe na tabela public.platform_admins
-        const { data: adminById, error: idErr } = await supabase
+        const email = (currentUser.email || '').toLowerCase().trim();
+
+        // 1. Atalho instantâneo de desenvolvimento / e-mail do gestor
+        if (email.includes('admin') || email.includes('flavio') || import.meta.env.DEV) {
+          setIsSuperAdmin(true);
+          return;
+        }
+
+        // 2. Consulta unificada em uma única requisição ao banco
+        const orClause = email ? `user_id.eq.${currentUser.id},email.eq.${email}` : `user_id.eq.${currentUser.id}`;
+        const { data: adminRows } = await supabase
           .from('platform_admins')
           .select('id')
-          .eq('user_id', currentUser.id)
-          .maybeSingle();
+          .or(orClause)
+          .limit(1);
 
-        if (!idErr && adminById) {
-          setIsSuperAdmin(true);
-          return;
-        }
-
-        // Consulta se user.email existe na tabela public.platform_admins
-        if (currentUser.email) {
-          const { data: adminByEmail, error: emailErr } = await supabase
-            .from('platform_admins')
-            .select('id')
-            .eq('email', currentUser.email.toLowerCase().trim())
-            .maybeSingle();
-
-          if (!emailErr && adminByEmail) {
-            setIsSuperAdmin(true);
-            return;
-          }
-        }
-
-        // Tenta RPC is_super_admin() se existir
-        const { data: rpcRes } = await supabase.rpc('is_super_admin');
-        if (rpcRes === true) {
-          setIsSuperAdmin(true);
-          return;
-        }
-
-        // Fallback de desenvolvimento
-        const email = (currentUser.email || '').toLowerCase();
-        if (email.includes('admin') || email.includes('flavio') || import.meta.env.DEV) {
+        if (adminRows && adminRows.length > 0) {
           setIsSuperAdmin(true);
           return;
         }
@@ -473,126 +549,126 @@ export const App: React.FC = () => {
         return;
       }
 
-      // 1. Busca família cadastrada
-      let query = supabase.from('families').select('*');
+      // 1. Identifica a família (com reutilização em memória se já carregada)
+      let currentFamily = family;
 
-      if (joinFamilyId) {
-        query = query.eq('id', joinFamilyId);
-        setInviteFamilyId(joinFamilyId);
-      } else if (sessionUser) {
-        // Tenta buscar a família vinculada ao usuário logado
-        const { data: memberRows } = await supabase
-          .from('family_members')
-          .select('family_id')
-          .eq('user_id', sessionUser.id)
-          .limit(1);
+      if (!currentFamily || joinFamilyId) {
+        let query = supabase.from('families').select('*');
 
-        if (memberRows && memberRows.length > 0 && memberRows[0].family_id) {
-          query = query.eq('id', memberRows[0].family_id);
-        } else {
-          // Se o usuário logado ainda não possui vínculo de user_id, usa a primeira família existente
-          query = query.order('created_at', { ascending: true }).limit(1);
+        if (joinFamilyId) {
+          query = query.eq('id', joinFamilyId);
+          setInviteFamilyId(joinFamilyId);
+        } else if (sessionUser) {
+          // Busca a família vinculada ao usuário logado
+          const { data: memberRows } = await supabase
+            .from('family_members')
+            .select('family_id')
+            .eq('user_id', sessionUser.id)
+            .limit(1);
+
+          if (memberRows && memberRows.length > 0 && memberRows[0].family_id) {
+            query = query.eq('id', memberRows[0].family_id);
+          } else {
+            query = query.order('created_at', { ascending: true }).limit(1);
+          }
         }
+
+        const { data: familiesData, error: famError } = await query;
+
+        if (famError || !familiesData || familiesData.length === 0) {
+          setFamily(null);
+          setMembers([]);
+          setEvents([]);
+          return;
+        }
+
+        if (joinFamilyId && sessionUser) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+
+        currentFamily = familiesData[0];
+        setFamily(currentFamily);
       }
 
-      const { data: familiesData, error: famError } = await query;
-
-      if (famError || !familiesData || familiesData.length === 0) {
-        setFamily(null);
-        setMembers([]);
-        setEvents([]);
+      if (!currentFamily) {
         return;
       }
 
-      // Se entrou por invite, podemos remover o parametro da url após autenticação confirmada
-      if (joinFamilyId && sessionUser) {
-        window.history.replaceState({}, '', window.location.pathname);
-      }
-
-      const currentFamily: Family = familiesData[0];
-      setFamily(currentFamily);
-
-      // 2. Busca membros da família
-      const { data: membersData } = await supabase
-        .from('family_members')
-        .select('*')
-        .eq('family_id', currentFamily.id)
-        .order('created_at', { ascending: true });
-
-      const loadedMembers: FamilyMember[] = membersData || [];
-      setMembers(loadedMembers);
-
-      // 3. Busca locais
-      const { data: locationsData } = await supabase
-        .from('locations')
-        .select('*')
-        .eq('family_id', currentFamily.id);
-
-      const locations: Location[] = locationsData || [];
-
-      // 4. Busca eventos filtrados pelo intervalo visível (currentDate & viewMode)
+      // 2. PARALELIZAÇÃO TOTAL (Batching concorrente via Promise.all)
+      // Carrega membros, locais, rotinas e eventos do intervalo visível SIMULTANEAMENTE
       const range = getVisibleRange(currentDate, viewMode);
 
-      let { data: eventsData } = await supabase
-        .from('events')
-        .select('*')
-        .eq('family_id', currentFamily.id)
-        .gte('start_time', range.start)
-        .lte('start_time', range.end)
-        .order('start_time', { ascending: true });
+      const [
+        membersResult,
+        locationsResult,
+        eventsResult,
+        routinesResult
+      ] = await Promise.all([
+        supabase
+          .from('family_members')
+          .select('*')
+          .eq('family_id', currentFamily.id)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('locations')
+          .select('*')
+          .eq('family_id', currentFamily.id),
+        supabase
+          .from('events')
+          .select('*')
+          .eq('family_id', currentFamily.id)
+          .gte('start_time', range.start)
+          .lte('start_time', range.end)
+          .order('start_time', { ascending: true }),
+        supabase
+          .from('routines')
+          .select('*')
+          .eq('family_id', currentFamily.id)
+      ]);
 
-      // 5. Garantir que todas as rotinas ativas estejam sincronizadas e materializadas para a visualização e próximos 90 dias
-      const newlyCreatedRoutineEvents = await ensureRoutineEvents(currentFamily.id, range);
+      const loadedMembers: FamilyMember[] = membersResult.data || [];
+      const locations: Location[] = locationsResult.data || [];
+      let eventsData = eventsResult.data || [];
+      const allRoutinesData = routinesResult.data || [];
+
+      setMembers(loadedMembers);
+
+      // 3. Sincronização prioritária e ágil de rotinas (usando rotinas já em cache de memória)
+      const newlyCreatedRoutineEvents = await ensureRoutineEvents(currentFamily.id, range, allRoutinesData);
 
       if (newlyCreatedRoutineEvents.length > 0) {
-        // Mescla os eventos recém-gerados que pertencem ao intervalo visível atual
         const visibleNewlyCreated = newlyCreatedRoutineEvents.filter((e) => {
           return e.start_time >= range.start && e.start_time <= range.end;
         });
         if (visibleNewlyCreated.length > 0) {
-          eventsData = [...(eventsData || []), ...visibleNewlyCreated];
+          eventsData = [...eventsData, ...visibleNewlyCreated];
           eventsData.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
         }
       }
 
-      // 6. Busca participantes dos eventos e rotinas para enriquecer routine_id
-      const { data: partData } = await supabase.from('event_participants').select('*');
-      const { data: allRoutinesData } = await supabase
-        .from('routines')
-        .select('*')
-        .eq('family_id', currentFamily.id);
-
-      // Auto-cura de eventos legados com routine_id nulo no Supabase
-      if (allRoutinesData && allRoutinesData.length > 0 && eventsData && eventsData.length > 0) {
-        for (const routine of allRoutinesData) {
-          const eventsNeedingHealing = eventsData.filter(
-            (e) => !e.routine_id && e.title && e.title.trim().toLowerCase() === routine.title.trim().toLowerCase()
-          );
-          if (eventsNeedingHealing.length > 0) {
-            const idsToHeal = eventsNeedingHealing.map((e) => e.id);
-            supabase
-              .from('events')
-              .update({ routine_id: routine.id })
-              .in('id', idsToHeal)
-              .then(({ error }) => {
-                if (!error) {
-                  console.log(`Auto-curados ${idsToHeal.length} eventos no banco para routine_id: ${routine.id}`);
-                }
-              });
-          }
-        }
+      // 4. Busca participantes filtrada estritamente pelos IDs dos eventos visíveis
+      // Elimina o table scan global de SELECT * em toda a tabela event_participants
+      let partData: any[] = [];
+      const eventIds = eventsData.map((e) => e.id).filter(Boolean);
+      if (eventIds.length > 0) {
+        const { data: pData } = await supabase
+          .from('event_participants')
+          .select('*')
+          .in('event_id', eventIds);
+        partData = pData || [];
       }
 
-      const populated = (eventsData || []).map((e) => {
+      // 5. Enriquecimento dos eventos
+      const populated = eventsData.map((e) => {
         const resp = loadedMembers.find((m) => m.id === e.responsible_id) || null;
         const loc = locations.find((l) => l.id === e.location_id) || null;
-        const parts = (partData || [])
+        const parts = partData
           .filter((p) => p.event_id === e.id)
           .map((p) => loadedMembers.find((m) => m.id === p.member_id))
           .filter(Boolean) as FamilyMember[];
 
         let matchedRoutineId = e.routine_id || null;
-        if (!matchedRoutineId && allRoutinesData && allRoutinesData.length > 0) {
+        if (!matchedRoutineId && allRoutinesData.length > 0) {
           const found = allRoutinesData.find(
             (r) => r.title.trim().toLowerCase() === (e.title || '').trim().toLowerCase()
           );
@@ -611,7 +687,39 @@ export const App: React.FC = () => {
         };
       });
 
-      setEvents(populated);
+      // 5. Deduplicação imediata em memória e limpeza automática em background no banco
+      const { dedupedEvents, duplicateIdsToDelete } = deduplicateAndCleanEvents<EventItem>(populated as EventItem[]);
+
+      if (duplicateIdsToDelete.length > 0) {
+        console.log(`[Deduplication] Excluindo ${duplicateIdsToDelete.length} eventos duplicados no banco...`);
+        supabase
+          .from('events')
+          .delete()
+          .in('id', duplicateIdsToDelete)
+          .then(({ error }) => {
+            if (error) {
+              console.warn('[Deduplication] Erro ao deletar duplicatas em background:', error);
+            } else {
+              console.log(`[Deduplication] ${duplicateIdsToDelete.length} duplicatas removidas com sucesso.`);
+            }
+          });
+      }
+
+      setEvents(dedupedEvents);
+
+      // 6. Materialização de longo prazo (90 dias) disparada em segundo plano com debounce
+      if (typeof window !== 'undefined' && currentFamily.id) {
+        const familyId = currentFamily.id;
+        const cacheKey = `last_routine_sync_${familyId}`;
+        const lastSync = sessionStorage.getItem(cacheKey);
+        const now = Date.now();
+        if (!lastSync || now - Number(lastSync) > 5 * 60 * 1000) {
+          sessionStorage.setItem(cacheKey, String(now));
+          setTimeout(() => {
+            syncFutureRoutinesInBackground(familyId, allRoutinesData);
+          }, 2000);
+        }
+      }
     } catch (err: any) {
       console.error('Erro ao conectar ao Supabase:', err);
       setFamily(null);
@@ -883,18 +991,11 @@ export const App: React.FC = () => {
     const targetEvent = events.find((e) => e.id === eventId);
     if (!targetEvent) return;
 
-    const oldStart = new Date(targetEvent.start_time);
-    const oldEnd = new Date(targetEvent.end_time);
-    const durationMs = oldEnd.getTime() - oldStart.getTime();
-
-    // Calcula nova data mantendo o horário UTC original
-    const [year, month, day] = targetDateStr.split('-').map(Number);
-    const newStart = new Date(oldStart);
-    newStart.setUTCFullYear(year, month - 1, day);
-    const newEnd = new Date(newStart.getTime() + durationMs);
-
-    const newStartTimeISO = newStart.toISOString();
-    const newEndTimeISO = newEnd.toISOString();
+    // Calcula nova data mantendo o horário literal nominal
+    const literalStartTime = extractLiteralTime(targetEvent.start_time);
+    const literalEndTime = extractLiteralTime(targetEvent.end_time);
+    const newStartTimeISO = buildNominalTimestamp(targetDateStr, literalStartTime);
+    const newEndTimeISO = buildNominalTimestamp(targetDateStr, literalEndTime);
 
     // 1. Resposta visual instantânea (otimista)
     setEvents((prev) =>
@@ -978,17 +1079,15 @@ export const App: React.FC = () => {
         }
       }
 
-      // 2. Horários
-      const [hours, minutes] = updatedData.startTime.split(':').map(Number);
-      const start = new Date(`${updatedData.dateStr}T00:00:00Z`);
-      start.setUTCHours(hours || 0, minutes || 0, 0, 0);
-      const end = new Date(start.getTime() + updatedData.duration * 60 * 1000);
+      // 2. Horários literais nominais
+      const startIso = buildNominalTimestamp(updatedData.dateStr, updatedData.startTime);
+      const endIso = buildNominalEndTimestamp(updatedData.dateStr, updatedData.startTime, updatedData.duration);
 
       // 3. Update na tabela events
       const eventUpdatePayload: any = {
         title: sanitizeTitle(updatedData.title),
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
+        start_time: startIso,
+        end_time: endIso,
         location_id: locationId,
         responsible_id: updatedData.responsible?.id || null,
         reminder_minutes: updatedData.reminder_minutes !== undefined ? updatedData.reminder_minutes : null,
@@ -1030,8 +1129,8 @@ export const App: React.FC = () => {
           return {
             ...e,
             title: updatedData.title,
-            start_time: start.toISOString(),
-            end_time: end.toISOString(),
+            start_time: startIso,
+            end_time: endIso,
             responsible_id: updatedData.responsible?.id || null,
             responsible: updatedData.responsible,
             participants: updatedData.participants,
@@ -1304,23 +1403,18 @@ export const App: React.FC = () => {
         }
       }
 
-      // Extrai horas e minutos
-      const [hours, minutes] = (activity.startTime || '18:00').split(':').map(Number);
+      // 4. Monta os registros para inserção com horários nominais literais
       const durationMinutes = activity.duration || 60;
-
-      // 4. Monta os registros para inserção
       const eventsToInsert = targetDates.map((dateStr) => {
-        const start = new Date(`${dateStr}T00:00:00Z`);
-        start.setUTCHours(hours || 0, minutes || 0, 0, 0);
-
-        const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+        const startIso = buildNominalTimestamp(dateStr, activity.startTime || '18:00');
+        const endIso = buildNominalEndTimestamp(dateStr, activity.startTime || '18:00', durationMinutes);
 
         return {
           family_id: family.id,
           routine_id: routineId,
           title: cleanActivityTitle,
-          start_time: start.toISOString(),
-          end_time: end.toISOString(),
+          start_time: startIso,
+          end_time: endIso,
           is_all_day: activity.is_all_day || false,
           location_id: locationId,
           responsible_id: activity.responsible?.id || null,
@@ -1550,6 +1644,7 @@ export const App: React.FC = () => {
 
         {/* Relatório Diário Matinal ("Briefing do Dia") */}
         <DailyBriefingCard
+          familyId={family?.id}
           events={events}
           members={members}
           currentMember={currentMember}
@@ -1650,7 +1745,7 @@ export const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="flex items-center gap-1.5 font-medium">
             <span className="font-bold text-slate-800">Nosso Dia</span>
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.5.6</span>
+            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.5.7</span>
           </p>
 
           <div className="flex items-center gap-4">

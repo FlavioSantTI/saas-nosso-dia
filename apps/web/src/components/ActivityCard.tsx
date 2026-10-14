@@ -2,6 +2,7 @@ import React from 'react';
 import { EventItem } from '../types';
 import { Clock, MapPin, User, Bell, AlertTriangle } from 'lucide-react';
 import { getMemberDisplayName } from '../lib/formatters';
+import { extractLiteralTime } from '../lib/dateUtils';
 
 interface ActivityCardProps {
   event: EventItem;
@@ -11,11 +12,6 @@ interface ActivityCardProps {
 }
 
 export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, onClick, onDragStart }) => {
-  const formatTime = (isoString: string) => {
-    const d = new Date(isoString);
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
-  };
-
   const isWithoutResponsible = !event.responsible_id;
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
@@ -45,7 +41,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-semibold text-sky-800 bg-sky-50 border border-sky-100/80 px-2 py-0.5 rounded-lg flex items-center gap-1 text-[11px]">
               <Clock className="w-3 h-3 text-sky-600 shrink-0" />
-              {formatTime(event.start_time)} - {formatTime(event.end_time)}
+              {extractLiteralTime(event.start_time)} - {extractLiteralTime(event.end_time)}
             </span>
             {event.reminder_minutes !== null && event.reminder_minutes !== undefined && (
               <span
@@ -67,7 +63,14 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
 
         {/* Título da Atividade */}
         <h3 className="font-bold text-slate-800 text-sm mb-2.5 group-hover:text-sky-700 transition-colors flex items-center justify-between">
-          <span className="leading-snug">{event.title}</span>
+          <span className="leading-snug flex items-center flex-wrap gap-1.5">
+            <span>{event.title}</span>
+            {event.location?.name && (
+              <span className="inline-flex items-center text-[10px] font-normal text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                • 📍 {event.location.name}
+              </span>
+            )}
+          </span>
           <span className="text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors ml-1 shrink-0 font-mono">⋮⋮</span>
         </h3>
 

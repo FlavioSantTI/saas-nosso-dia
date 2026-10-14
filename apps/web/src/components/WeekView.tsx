@@ -3,6 +3,7 @@ import { EventItem, FamilyMember } from '../types';
 import { ActivityCard } from './ActivityCard';
 import { getMonday } from './CalendarNavigation';
 import { Sun } from 'lucide-react';
+import { toLocalDateString, extractLiteralDate, extractLiteralTime } from '../lib/dateUtils';
 
 interface WeekViewProps {
   currentDate?: Date;
@@ -22,11 +23,7 @@ export const WeekView: React.FC<WeekViewProps> = ({
 }) => {
   const [dragOverDay, setDragOverDay] = React.useState<number | null>(null);
 
-  const today = new Date();
-  const todayY = today.getFullYear();
-  const todayM = String(today.getMonth() + 1).padStart(2, '0');
-  const todayD = String(today.getDate()).padStart(2, '0');
-  const todayDateStr = `${todayY}-${todayM}-${todayD}`;
+  const todayDateStr = toLocalDateString();
 
   const monday = getMonday(currentDate);
   const weekdayConfig = [
@@ -62,19 +59,23 @@ export const WeekView: React.FC<WeekViewProps> = ({
       )
     : events;
 
-  // Detecção de conflito simples: mesmo responsável em horários sobrepostos
+  // Detecção de conflito: mesmo responsável em horários sobrepostos
   const detectConflicts = (dayEvents: EventItem[]) => {
     const conflictIds = new Set<string>();
     for (let i = 0; i < dayEvents.length; i++) {
       for (let j = i + 1; j < dayEvents.length; j++) {
         const e1 = dayEvents[i];
         const e2 = dayEvents[j];
-        if (e1.responsible_id && e1.responsible_id === e2.responsible_id) {
-          const s1 = new Date(e1.start_time).getTime();
-          const e_end1 = new Date(e1.end_time).getTime();
-          const s2 = new Date(e2.start_time).getTime();
-          const e_end2 = new Date(e2.end_time).getTime();
-          if (s1 < e_end2 && s2 < e_end1) {
+        if (e1.responsible_id && e1.responsible_id === e2.responsible_id && !e1.is_all_day && !e2.is_all_day) {
+          const [s1H, s1M] = extractLiteralTime(e1.start_time).split(':').map(Number);
+          const [e1H, e1M] = extractLiteralTime(e1.end_time || e1.start_time).split(':').map(Number);
+          const [s2H, s2M] = extractLiteralTime(e2.start_time).split(':').map(Number);
+          const [e2H, e2M] = extractLiteralTime(e2.end_time || e2.start_time).split(':').map(Number);
+          const t1Start = s1H * 60 + s1M;
+          const t1End = !isNaN(e1H) && !isNaN(e1M) ? e1H * 60 + e1M : t1Start + 60;
+          const t2Start = s2H * 60 + s2M;
+          const t2End = !isNaN(e2H) && !isNaN(e2M) ? e2H * 60 + e2M : t2Start + 60;
+          if (t1Start < t2End && t2Start < t1End) {
             conflictIds.add(e1.id);
             conflictIds.add(e2.id);
           }
@@ -111,13 +112,9 @@ export const WeekView: React.FC<WeekViewProps> = ({
   return (
     <div className="grid grid-cols-1 md:grid-cols-7 gap-3 mt-4">
       {days.map((day) => {
-        const dayEvents = filteredEvents.filter((e) => {
-          const d = new Date(e.start_time);
-          const y = d.getUTCFullYear();
-          const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-          const dayNum = String(d.getUTCDate()).padStart(2, '0');
-          return `${y}-${m}-${dayNum}` === day.dateStr;
-        });
+        const dayEvents = filteredEvents
+          .filter((e) => extractLiteralDate(e.start_time) === day.dateStr)
+          .sort((a, b) => extractLiteralTime(a.start_time).localeCompare(extractLiteralTime(b.start_time)));
 
         const conflictIds = detectConflicts(dayEvents);
         const isDraggingOverThis = dragOverDay === day.dayOfWeek;

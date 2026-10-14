@@ -94,7 +94,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
         type,
         days,
         is_all_day: isAllDay,
-        startTime: isAllDay ? '00:00' : startTime,
+        startTime: isAllDay ? '00:00' : (startTime.trim() || '12:00'),
         duration: isAllDay ? 1440 : parseInt(duration, 10),
         participants,
         responsible,

@@ -9,6 +9,8 @@ import {
   sanitizeTitle,
   validateTitle,
 } from '../lib/sanitize';
+import { extractLiteralDate, extractLiteralTime } from '../lib/dateUtils';
+import { downloadNativeAlarmIcs } from '../lib/alarmIcsGenerator';
 
 interface EditActivityModalProps {
   isOpen: boolean;
@@ -73,22 +75,25 @@ export const EditActivityModal: React.FC<EditActivityModalProps> = ({
       setShowDeleteConfirm(false);
       setTitleError(null);
       
-      const start = new Date(event.start_time);
-      const end = new Date(event.end_time);
-      
-      // Data ISO no formato YYYY-MM-DD
-      const yyyy = start.getUTCFullYear();
-      const mm = String(start.getUTCMonth() + 1).padStart(2, '0');
-      const dd = String(start.getUTCDate()).padStart(2, '0');
-      setDateStr(`${yyyy}-${mm}-${dd}`);
+      // Data ISO no formato YYYY-MM-DD literal
+      setDateStr(extractLiteralDate(event.start_time));
 
-      // Hora HH:MM
-      const hours = String(start.getUTCHours()).padStart(2, '0');
-      const minutes = String(start.getUTCMinutes()).padStart(2, '0');
-      setStartTime(`${hours}:${minutes}`);
+      // Hora HH:MM literal
+      setStartTime(extractLiteralTime(event.start_time));
 
-      // Duração em minutos
-      const diffMinutes = Math.max(15, Math.round((end.getTime() - start.getTime()) / (1000 * 60)));
+      // Duração em minutos (calculada a partir de start_time e end_time literais)
+      let diffMinutes = 60;
+      if (event.end_time && event.start_time) {
+        const [sH, sM] = extractLiteralTime(event.start_time).split(':').map(Number);
+        const [eH, eM] = extractLiteralTime(event.end_time).split(':').map(Number);
+        if (!isNaN(sH) && !isNaN(sM) && !isNaN(eH) && !isNaN(eM)) {
+          const totalStart = sH * 60 + sM;
+          const totalEnd = eH * 60 + eM;
+          if (totalEnd > totalStart) {
+            diffMinutes = totalEnd - totalStart;
+          }
+        }
+      }
       setDuration(String(diffMinutes || 60));
 
       // Participantes
@@ -395,15 +400,28 @@ export const EditActivityModal: React.FC<EditActivityModalProps> = ({
           </div>
 
           {/* Footer com Ações */}
-          <div className="pt-4 mt-2 border-t border-slate-100 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleDeleteClick}
-              disabled={isDeleting || isSaving}
-              className="px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-            >
-              🗑️ {isDeleting ? 'Excluindo...' : 'Excluir Atividade'}
-            </button>
+          <div className="pt-4 mt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDeleteClick}
+                disabled={isDeleting || isSaving}
+                className="px-3.5 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-xl transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                🗑️ {isDeleting ? 'Excluindo...' : 'Excluir'}
+              </button>
+
+              {event && (
+                <button
+                  type="button"
+                  onClick={() => downloadNativeAlarmIcs(event)}
+                  title="Exportar arquivo .ics com despertador nativo (VALARM) para iOS e Android"
+                  className="px-3.5 py-2 text-xs font-bold text-amber-900 bg-amber-100/80 hover:bg-amber-200/80 border border-amber-300/80 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  ⏰ Despertador Celular (.ics)
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               <button

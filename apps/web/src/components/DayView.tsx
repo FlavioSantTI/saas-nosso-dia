@@ -1,6 +1,7 @@
 import React from 'react';
 import { EventItem, FamilyMember } from '../types';
 import { ActivityCard } from './ActivityCard';
+import { toLocalDateString, extractLiteralDate, extractLiteralTime } from '../lib/dateUtils';
 
 interface DayViewProps {
   currentDate: Date;
@@ -18,11 +19,8 @@ export const DayView: React.FC<DayViewProps> = ({
   onCardClick,
   onAddNewActivity,
 }) => {
-  // Data selecionada no formato YYYY-MM-DD
-  const yyyy = currentDate.getFullYear();
-  const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
-  const dd = String(currentDate.getDate()).padStart(2, '0');
-  const targetDateStr = `${yyyy}-${mm}-${dd}`;
+  // Data selecionada no formato YYYY-MM-DD usando métodos locais
+  const targetDateStr = toLocalDateString(currentDate);
 
   // Filtro de membro
   const memberFiltered = selectedMemberId
@@ -33,29 +31,29 @@ export const DayView: React.FC<DayViewProps> = ({
       )
     : events;
 
-  // Filtro pelo dia
+  // Filtro pelo dia literal
   const dayEvents = memberFiltered
     .filter((e) => {
-      const start = new Date(e.start_time);
-      const sY = start.getUTCFullYear();
-      const sM = String(start.getUTCMonth() + 1).padStart(2, '0');
-      const sD = String(start.getUTCDate()).padStart(2, '0');
-      return `${sY}-${sM}-${sD}` === targetDateStr;
+      return extractLiteralDate(e.start_time) === targetDateStr;
     })
-    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+    .sort((a, b) => extractLiteralTime(a.start_time).localeCompare(extractLiteralTime(b.start_time)));
 
-  // Detecção de conflitos
+  // Detecção de conflitos nominais
   const conflictIds = new Set<string>();
   for (let i = 0; i < dayEvents.length; i++) {
     for (let j = i + 1; j < dayEvents.length; j++) {
       const e1 = dayEvents[i];
       const e2 = dayEvents[j];
-      if (e1.responsible_id && e1.responsible_id === e2.responsible_id) {
-        const s1 = new Date(e1.start_time).getTime();
-        const e_end1 = new Date(e1.end_time).getTime();
-        const s2 = new Date(e2.start_time).getTime();
-        const e_end2 = new Date(e2.end_time).getTime();
-        if (s1 < e_end2 && s2 < e_end1) {
+      if (e1.responsible_id && e1.responsible_id === e2.responsible_id && !e1.is_all_day && !e2.is_all_day) {
+        const [s1H, s1M] = extractLiteralTime(e1.start_time).split(':').map(Number);
+        const [e1H, e1M] = extractLiteralTime(e1.end_time || e1.start_time).split(':').map(Number);
+        const [s2H, s2M] = extractLiteralTime(e2.start_time).split(':').map(Number);
+        const [e2H, e2M] = extractLiteralTime(e2.end_time || e2.start_time).split(':').map(Number);
+        const t1Start = s1H * 60 + s1M;
+        const t1End = !isNaN(e1H) && !isNaN(e1M) ? e1H * 60 + e1M : t1Start + 60;
+        const t2Start = s2H * 60 + s2M;
+        const t2End = !isNaN(e2H) && !isNaN(e2M) ? e2H * 60 + e2M : t2Start + 60;
+        if (t1Start < t2End && t2Start < t1End) {
           conflictIds.add(e1.id);
           conflictIds.add(e2.id);
         }

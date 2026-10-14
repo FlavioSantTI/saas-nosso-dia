@@ -1,6 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { EventItem, FamilyMember } from '../types';
 import { getMemberDisplayName } from '../lib/formatters';
+import {
+  extractLiteralTime,
+  extractLiteralDate,
+  toLocalDateString,
+  FAMILY_TIMEZONE,
+} from '../lib/dateUtils';
+import { supabase } from '../lib/supabase';
 import {
   Clock,
   MapPin,
@@ -11,6 +18,7 @@ import {
 } from 'lucide-react';
 
 interface DailyBriefingCardProps {
+  familyId?: string;
   events: EventItem[];
   members: FamilyMember[];
   currentMember?: FamilyMember | null;
@@ -18,17 +26,8 @@ interface DailyBriefingCardProps {
   onOpenSummary?: (tab?: 'today' | 'week') => void;
 }
 
-const MONTH_NAMES = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-];
-
-const WEEKDAY_NAMES = [
-  'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
-  'Quinta-feira', 'Sexta-feira', 'Sábado'
-];
-
 export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
+  familyId,
   events,
   members,
   currentMember,
@@ -36,6 +35,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
   onOpenSummary,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [rpcEvents, setRpcEvents] = useState<EventItem[] | null>(null);
 
   // Identifica o membro ativo (preferencialmente logado ou primeiro adulto)
   const activeMember = useMemo(() => {
@@ -44,40 +44,113 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
     return firstAdult || members[0] || null;
   }, [currentMember, members]);
 
-  // Data atual de referência
-  const now = useMemo(() => new Date(), []);
+  // Data atual de referência no relógio local (evita sumiço às 21h)
+  const todayStr = useMemo(() => toLocalDateString(), []);
 
-  // Saudação de acordo com o turno
+  // Saudação de acordo com o turno no fuso local
   const greeting = useMemo(() => {
-    const hour = now.getHours();
+    const hour = new Date().getHours();
     if (hour < 12) return '☀️ Bom dia';
     if (hour < 18) return '🌤️ Boa tarde';
     return '🌙 Boa noite';
-  }, [now]);
+  }, []);
 
-  // Data por extenso: "Hoje é [Dia da semana], [Dia] de [Mês]"
+  // Data por extenso no fuso de Palmas: "Hoje é [Dia da semana], [Dia] de [Mês]"
   const formattedToday = useMemo(() => {
-    const weekday = WEEKDAY_NAMES[now.getDay()];
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = MONTH_NAMES[now.getMonth()];
-    return `Hoje é ${weekday}, ${day} de ${month}`;
-  }, [now]);
+    const todayDate = new Date();
+    try {
+      const weekday = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', timeZone: FAMILY_TIMEZONE }).format(todayDate);
+      const day = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', timeZone: FAMILY_TIMEZONE }).format(todayDate);
+      const month = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: FAMILY_TIMEZONE }).format(todayDate);
+      const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+      return `Hoje é ${capWeekday}, ${day} de ${month}`;
+    } catch {
+      return `Hoje, ${todayStr}`;
+    }
+  }, [todayStr]);
 
-  // Filtra eventos de HOJE (compara YYYY-MM-DD em UTC ou Local)
-  const todayStr = useMemo(() => {
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }, [now]);
+  // Consumo da RPC rpc_get_family_daily_briefing com fallback gracioso
+  useEffect(() => {
+    let isMounted = true;
+    if (!familyId) return;
 
-  const todayEvents = useMemo(() => {
+    async function loadBriefingFromRpc() {
+      try {
+        const { data, error } = await supabase.rpc('rpc_get_family_daily_briefing', {
+          p_family_id: familyId,
+          p_target_date: todayStr,
+        });
+
+        if (error) {
+          // Erro esperado se anônimo ou sem permissão na RPC, fallback local
+          return;
+        }
+
+        if (data && isMounted) {
+          // RPC pode retornar array de atividades ou objeto com lista
+          let rawList: any[] = [];
+          if (Array.isArray(data)) {
+            rawList = data;
+          } else if (Array.isArray((data as any).events)) {
+            rawList = (data as any).events;
+          } else if (Array.isArray((data as any).activities)) {
+            rawList = (data as any).activities;
+          }
+
+          if (rawList.length > 0) {
+            // Mapeia eventos da RPC mantendo referências e integridade com o estado local
+            const mappedEvents: EventItem[] = rawList.map((item: any) => {
+              const matchedLocal = events.find((e) => e.id === item.id);
+              return {
+                id: item.id || matchedLocal?.id || `rpc_${Math.random()}`,
+                family_id: item.family_id || familyId,
+                routine_id: item.routine_id || matchedLocal?.routine_id,
+                title: item.title || matchedLocal?.title || 'Atividade',
+                start_time: item.start_time || matchedLocal?.start_time || new Date().toISOString(),
+                end_time: item.end_time || matchedLocal?.end_time || new Date().toISOString(),
+                is_all_day: item.is_all_day !== undefined ? item.is_all_day : (matchedLocal?.is_all_day || false),
+                location_id: item.location_id || matchedLocal?.location_id,
+                responsible_id: item.responsible_id || matchedLocal?.responsible_id,
+                status: item.status || matchedLocal?.status || 'SCHEDULED',
+                notes: item.notes || matchedLocal?.notes,
+                reminder_minutes: item.reminder_minutes !== undefined ? item.reminder_minutes : matchedLocal?.reminder_minutes,
+                location: item.location || (item.location_name ? { id: item.location_id || '', family_id: familyId, name: item.location_name } : matchedLocal?.location),
+                responsible: item.responsible || matchedLocal?.responsible || (item.responsible_id ? members.find((m) => m.id === item.responsible_id) : null),
+                participants: item.participants && Array.isArray(item.participants) && item.participants.length > 0 && typeof item.participants[0] === 'object'
+                  ? item.participants
+                  : matchedLocal?.participants || (item.participant_ids ? members.filter((m) => item.participant_ids.includes(m.id)) : []),
+              };
+            });
+            setRpcEvents(mappedEvents);
+          }
+        }
+      } catch (err) {
+        console.warn('Fallback para briefing local:', err);
+      }
+    }
+
+    loadBriefingFromRpc();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [familyId, todayStr, events, members]);
+
+  // Filtra eventos de HOJE considerando a data nominal/literal
+  const localTodayEvents = useMemo(() => {
     return events.filter((e) => {
       if (!e.start_time) return false;
-      const eventDateStr = e.start_time.slice(0, 10);
-      return eventDateStr === todayStr;
+      return extractLiteralDate(e.start_time) === todayStr;
     });
   }, [events, todayStr]);
+
+  // Se a RPC retornou eventos válidos, usa-os; caso contrário, usa o filtro local
+  const todayEvents = useMemo(() => {
+    if (rpcEvents && rpcEvents.length > 0) {
+      return rpcEvents;
+    }
+    return localTodayEvents;
+  }, [rpcEvents, localTodayEvents]);
 
   // Atividades de HOJE sob a responsabilidade do membro ativo
   const myTodayEvents = useMemo(() => {
@@ -87,13 +160,17 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
       .sort((a, b) => (a.start_time > b.start_time ? 1 : -1));
   }, [todayEvents, activeMember]);
 
-  // Próxima atividade próxima do horário atual (nas próximas horas)
+  // Próxima atividade próxima do horário atual (nas próximas horas) usando horários literais
   const nextActivity = useMemo(() => {
-    const nowMs = now.getTime();
+    const now = new Date();
+    const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
     for (const ev of myTodayEvents) {
-      const evDate = new Date(ev.start_time);
-      const diffMs = evDate.getTime() - nowMs;
-      const diffMinutes = Math.round(diffMs / (60 * 1000));
+      if (ev.is_all_day) continue;
+      const [h, m] = extractLiteralTime(ev.start_time).split(':').map(Number);
+      if (isNaN(h) || isNaN(m)) continue;
+      const evTotalMinutes = h * 60 + m;
+      const diffMinutes = evTotalMinutes - currentTotalMinutes;
       if (diffMinutes >= 0 && diffMinutes <= 360) {
         return {
           event: ev,
@@ -102,7 +179,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
       }
     }
     return null;
-  }, [myTodayEvents, now]);
+  }, [myTodayEvents]);
 
   // Atividades sob responsabilidade do outro cônjuge/parceiro hoje
   const spouseInfo = useMemo(() => {
@@ -190,10 +267,13 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
               <div className="flex items-center gap-2">
                 <span className="text-base animate-pulse">⏱️</span>
                 <span>
-                  <strong>Próxima saída:</strong> em <strong>{nextActivity.diffMinutes} minutos</strong>
-                  {nextActivity.event.location?.name
-                    ? ` para ${nextActivity.event.location.name}`
-                    : ` — ${nextActivity.event.title}`}
+                  <strong>Próxima saída:</strong> em <strong>{nextActivity.diffMinutes} minutos</strong> —{' '}
+                  <span className="font-semibold">{nextActivity.event.title}</span>
+                  {nextActivity.event.location?.name && (
+                    <span className="text-amber-900/90 font-medium ml-1.5 inline-flex items-center text-[11px] bg-amber-100/80 px-2 py-0.5 rounded-md">
+                      • 📍 {nextActivity.event.location.name}
+                    </span>
+                  )}
                   .
                 </span>
               </div>
@@ -217,11 +297,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                 {myTodayEvents.map((ev) => {
                   const startTimeStr = ev.is_all_day
                     ? 'Dia Inteiro'
-                    : new Date(ev.start_time).toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'UTC',
-                      });
+                    : extractLiteralTime(ev.start_time);
                   const participantNames =
                     ev.participants && ev.participants.length > 0
                       ? ev.participants.map((p) => getMemberDisplayName(p)).join(', ')
@@ -239,19 +315,24 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                           {startTimeStr}
                         </span>
                         {ev.location?.name && (
-                          <span className="text-[10px] text-slate-500 flex items-center gap-0.5 truncate max-w-[110px]">
-                            <MapPin className="w-2.5 h-2.5 text-slate-400" />
-                            {ev.location.name}
+                          <span className="text-[10px] text-slate-500 flex items-center gap-0.5 truncate max-w-[110px]" title={ev.location.name}>
+                            <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{ev.location.name}</span>
                           </span>
                         )}
                       </div>
-                      <h4 className="text-xs font-bold text-slate-800 line-clamp-1 group-hover:text-sky-700 transition-colors">
-                        {ev.title}
+                      <h4 className="text-xs font-bold text-slate-800 line-clamp-1 group-hover:text-sky-700 transition-colors flex items-center flex-wrap gap-1">
+                        <span>{ev.title}</span>
+                        {ev.location?.name && (
+                          <span className="text-[10px] font-normal text-slate-400">
+                            • 📍 {ev.location.name}
+                          </span>
+                        )}
                       </h4>
                       {participantNames && (
                         <p className="text-[10px] text-slate-500 flex items-center gap-1 truncate">
-                          <Users className="w-2.5 h-2.5 text-slate-400" />
-                          <span>{participantNames}</span>
+                          <Users className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                          <span className="truncate">{participantNames}</span>
                         </p>
                       )}
                     </div>
@@ -279,12 +360,9 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                     .map((e) => {
                       const t = e.is_all_day
                         ? 'Dia Inteiro'
-                        : new Date(e.start_time).toLocaleTimeString('pt-BR', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            timeZone: 'UTC',
-                          });
-                      return `${e.title} às ${t}`;
+                        : extractLiteralTime(e.start_time);
+                      const locStr = e.location?.name ? ` • 📍 ${e.location.name}` : '';
+                      return `${e.title}${locStr} às ${t}`;
                     })
                     .join(' • ')}
                   .

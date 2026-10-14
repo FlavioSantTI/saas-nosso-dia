@@ -1,5 +1,6 @@
 import React from 'react';
 import { EventItem, FamilyMember } from '../types';
+import { extractLiteralDate } from '../lib/dateUtils';
 
 interface MonthViewProps {
   currentDate: Date;
@@ -39,15 +40,11 @@ export const MonthView: React.FC<MonthViewProps> = ({
       )
     : events;
 
-  // Mapa de eventos por data "YYYY-MM-DD"
+  // Mapa de eventos por data "YYYY-MM-DD" literal
   const eventsByDate = React.useMemo(() => {
     const map = new Map<string, EventItem[]>();
     memberFiltered.forEach((e) => {
-      const d = new Date(e.start_time);
-      const y = d.getUTCFullYear();
-      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(d.getUTCDate()).padStart(2, '0');
-      const key = `${y}-${m}-${day}`;
+      const key = extractLiteralDate(e.start_time);
       if (!map.has(key)) {
         map.set(key, []);
       }

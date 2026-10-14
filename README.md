@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.5.6-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.5.7-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,26 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.5.7] — 2026-10-13
+#### 🕒 Correção Definitiva de Horários Literais, Sumiço Noturno (21h) e Duplicatas
+- **Novo módulo central `apps/web/src/lib/dateUtils.ts`:**
+  - `extractLiteralTime` / `formatTimeLiteral`: extrai `HH:mm` direto da string do banco, sem conversão de fuso — acaba com o deslocamento de **-3h** (ex.: `18:00` exibido como `15:00`).
+  - `extractLiteralDate`: extrai `YYYY-MM-DD` literal do timestamp.
+  - `getLocalDateString` / `toLocalDateString`: data de hoje pelo relógio local do dispositivo — **sem `toISOString()`**, eliminando o sumiço das atividades após as 21:00 (meia-noite UTC).
+  - `parseSafeLocalDate`, `getLiteralDayOfWeek`, `buildNominalTimestamp`, `buildNominalEndTimestamp`.
+  - `deduplicateAndCleanEvents`: deduplicação por `routine_id + data + hora` (ou `título + data + hora`), unificando participantes (ex.: *Rafa, Maria*) no mesmo card.
+- **Deduplicação automática (`App.tsx`):** eventos duplicados são removidos da tela na hora e excluídos do banco em segundo plano. A materialização de rotinas (`ensureRoutineEvents` e sincronização de 90 dias) verifica a chave literal antes de inserir, impedindo novas duplicatas.
+- **Gravação nominal:** criação, edição e arrastar-e-soltar de atividades passam a salvar o horário exatamente como escolhido pelo usuário.
+- **Componentes atualizados:** `ActivityCard`, `DayView`, `WeekView`, `MonthView`, `DailyBriefingCard`, `SummaryModal`, `EditActivityModal`, `UnassignedActivitiesModal` — filtros, ordenação, contagem regressiva e detecção de conflitos agora usam data/hora literais.
+- **Fim do texto colado ("escolaEscola"):** título e local sempre separados visualmente (`• 📍 Local`).
+- **Calendário abre no dia atual** (antes iniciava fixo em 05/10/2026).
+
+#### 🔐 Admin, Segurança e Alarmes
+- **`components/AdminUserManagement.tsx` (standalone):** ativação direta e troca de senha com listagem própria via `admin_list_users` e mensagem pronta para WhatsApp (link em texto puro). *Ainda não integrado ao `/admin`; a versão em uso continua sendo `components/admin/AdminUserManagement.tsx`.*
+- **`nginx.conf`:** headers OWASP mantidos junto com CSP e gzip; headers de segurança agora também aplicados aos assets estáticos (correção da herança de `add_header` no Nginx).
+- **`lib/alarmIcsGenerator.ts`:** geração de `.ics` com `VALARM` (15 min antes e no horário), compatível com RFC 5545 (VTIMEZONE `America/Araguaina`, `DTSTAMP` UTC, escape de texto e dobra de linhas). *Botão de uso na interface pendente.*
+- **Rótulo Global de Versão:** atualizado para `v1.5.7` no rodapé, no `package.json` e no `README.md`.
 
 ### [v1.5.6] — 2026-10-13
 #### 🔑 Painel Root Admin: Ativação Direta de Usuários & Gestão de Senhas

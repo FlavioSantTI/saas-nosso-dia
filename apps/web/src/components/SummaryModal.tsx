@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { EventItem, FamilyMember } from '../types';
 import { getMemberDisplayName } from '../lib/formatters';
+import { extractLiteralDate, extractLiteralTime, toLocalDateString } from '../lib/dateUtils';
 import {
   Sun,
   BarChart3,
@@ -56,21 +57,20 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
   // CÁLCULOS: ABA 1 - "☀️ MEU DIA HOJE"
   // -------------------------------------------------------------
   const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayStr = toLocalDateString();
 
-  // Eventos de Hoje
-  const todayEvents = events.filter((e) => e.start_time.startsWith(todayStr));
+  // Eventos de Hoje comparando strings literais (evita virar o dia às 21h)
+  const todayEvents = events.filter((e) => extractLiteralDate(e.start_time) === todayStr);
 
-  // Missões do membro ativo hoje
+  // Missões do membro ativo hoje ordenadas por horário literal
   const myTodayEvents = todayEvents
     .filter((e) => e.responsible_id === activeMember?.id)
-    .sort(
-      (a, b) =>
-        new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-    );
+    .sort((a, b) => extractLiteralTime(a.start_time).localeCompare(extractLiteralTime(b.start_time)));
 
-  // Saudação de acordo com o horário
+  // Saudação de acordo com o horário local
   const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentTotalMinutes = currentHour * 60 + currentMinute;
   const firstName = getMemberDisplayName(activeMember) || 'Família';
   const greeting =
     currentHour < 12
@@ -79,7 +79,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
       ? `🌤️ Boa tarde, ${firstName}! Suas missões para hoje:`
       : `🌙 Boa noite, ${firstName}! Suas missões para hoje:`;
 
-  // Próximo compromisso e contagem regressiva
+  // Próximo compromisso e contagem regressiva baseados em horários nominais
   let nextEventStatus: {
     status: 'in_progress' | 'upcoming' | 'completed' | 'none';
     message: string;
@@ -88,9 +88,12 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
   if (myTodayEvents.length > 0) {
     const inProgress = myTodayEvents.find((e) => {
-      const start = new Date(e.start_time);
-      const end = new Date(e.end_time);
-      return now >= start && now <= end;
+      const [sh, sm] = extractLiteralTime(e.start_time).split(':').map(Number);
+      const [eh, em] = extractLiteralTime(e.end_time || e.start_time).split(':').map(Number);
+      if (isNaN(sh) || isNaN(sm)) return false;
+      const startMin = sh * 60 + sm;
+      const endMin = !isNaN(eh) && !isNaN(em) ? eh * 60 + em : startMin + 60;
+      return currentTotalMinutes >= startMin && currentTotalMinutes <= endMin;
     });
 
     if (inProgress) {
@@ -100,15 +103,20 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
         event: inProgress,
       };
     } else {
-      const upcoming = myTodayEvents.find((e) => new Date(e.start_time) > now);
+      const upcoming = myTodayEvents.find((e) => {
+        const [sh, sm] = extractLiteralTime(e.start_time).split(':').map(Number);
+        if (isNaN(sh) || isNaN(sm)) return false;
+        return sh * 60 + sm > currentTotalMinutes;
+      });
+
       if (upcoming) {
-        const start = new Date(upcoming.start_time);
-        const diffMinutes = Math.round((start.getTime() - now.getTime()) / 60000);
+        const [sh, sm] = extractLiteralTime(upcoming.start_time).split(':').map(Number);
+        const diffMinutes = (sh * 60 + sm) - currentTotalMinutes;
 
         const timeMsg =
           diffMinutes <= 60
             ? `⏱️ Próxima atividade em ${diffMinutes} minuto${diffMinutes === 1 ? '' : 's'}`
-            : `⏱️ Próxima atividade às ${start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+            : `⏱️ Próxima atividade às ${extractLiteralTime(upcoming.start_time)}`;
 
         nextEventStatus = {
           status: 'upcoming',
@@ -284,20 +292,11 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                 ) : (
                   <div className="relative pl-4 space-y-3 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-sky-200">
                     {myTodayEvents.map((event) => {
-                      const startTimeStr = new Date(
-                        event.start_time
-                      ).toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      });
-                      const endTimeStr = new Date(
-                        event.end_time
-                      ).toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      });
+                      const startTimeStr = extractLiteralTime(event.start_time);
+                      const endTimeStr = extractLiteralTime(event.end_time);
 
-                      const isPassed = new Date(event.end_time) < now;
+                      const [endH, endM] = extractLiteralTime(event.end_time || event.start_time).split(':').map(Number);
+                      const isPassed = !isNaN(endH) && !isNaN(endM) && (endH * 60 + endM) < currentTotalMinutes;
 
                       return (
                         <div
@@ -383,10 +382,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                 ) : (
                   <div className="space-y-2">
                     {spouseTodayEvents.map((ev) => {
-                      const startTime = new Date(ev.start_time).toLocaleTimeString(
-                        'pt-BR',
-                        { hour: '2-digit', minute: '2-digit' }
-                      );
+                      const startTime = extractLiteralTime(ev.start_time);
                       const respName = getMemberDisplayName(ev.responsible) || 'Cônjuge';
                       return (
                         <div
@@ -401,8 +397,8 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                               {ev.title}
                             </span>
                             {ev.location && (
-                              <span className="text-slate-500 text-[11px] ml-1">
-                                ({ev.location.name})
+                              <span className="text-slate-500 text-[11px] ml-1.5 inline-flex items-center gap-0.5">
+                                • 📍 {ev.location.name}
                               </span>
                             )}
                           </div>
@@ -614,12 +610,8 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                 ) : (
                   <div className="space-y-1.5">
                     {allDayEvents.map((ev) => {
-                      const dateFormatted = new Date(
-                        ev.start_time
-                      ).toLocaleDateString('pt-BR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                      });
+                      const dateParts = extractLiteralDate(ev.start_time).split('-');
+                      const dateFormatted = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}` : '--/--';
                       const isBirthday =
                         ev.title.toLowerCase().includes('aniversário') ||
                         ev.title.toLowerCase().includes('aniversario') ||
