@@ -22,6 +22,7 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { LandingPage } from './components/LandingPage';
 import { sanitizeTitle } from './lib/sanitize';
 import { usePwaUpdate } from './lib/usePwaUpdate';
+import { APP_VERSION } from './constants/version';
 import {
   extractLiteralDate,
   extractLiteralTime,
@@ -1751,7 +1752,7 @@ export const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="flex items-center gap-1.5 font-medium">
             <span className="font-bold text-slate-800">Nosso Dia</span>
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v1.5.7</span>
+            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v{APP_VERSION}</span>
           </p>
 
           <div className="flex items-center gap-4">
