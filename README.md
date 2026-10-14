@@ -203,6 +203,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e
   - Tag discreta `v2.0.0` no cabeçalho ao lado do logotipo.
   - Alerta pulsante `🟢 Novo Update` no cabeçalho quando uma nova versão for detectada.
   - Banner ergonômico na parte inferior da tela (zona do polegar) avisando sobre a nova versão com botão `[ Atualizar ]`.
+- **Conexão Real com Google Gemini 1.5 Flash Multimodal (`gemini.ts` e `QuickAddWithAI.tsx`):**
+  - **API Oficial:** Endpoint `v1beta/models/gemini-1.5-flash:generateContent` com `responseMimeType: "application/json"`.
+  - **Reconhecimento de Voz:** Ditado por voz com Web Speech API nativa em `pt-BR`.
+  - **Visão Computacional:** Processamento multimodal de fotos de bilhetes escolares ou calendários em papel diretamente pela câmera/upload.
+  - **Casamento Inteligente:** Associação automática com filhos e responsáveis cadastrados na família.
+  - **Gestão de Chave:** Suporte a `VITE_GEMINI_API_KEY` ou inserção direta no modal com persistência local.
 
 ### [v1.5.8] — 2026-10-14
 #### 📅 Navegação Temporal no Resumo Familiar & Cancelamento Pontual de Atividades

@@ -1,870 +1,486 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Family, FamilyMember } from '../types';
-import { supabase } from '../lib/supabase';
+import React, { useState, useRef } from 'react';
+import { FamilyMember } from '../types';
 import {
-  parseTextRoutine,
-  parseAudioRoutine,
-  parseMediaRoutine,
-  GeminiRoutineOutput,
+  extractRoutineWithGemini,
+  getGeminiApiKey,
+  setGeminiApiKey,
+  ExtractedRoutineData
 } from '../lib/gemini';
 import {
-  Bot,
   Sparkles,
-  Check,
   Mic,
-  Square,
-  Upload,
-  Clock,
-  MapPin,
-  Calendar,
+  MicOff,
+  Camera,
+  X,
+  Key,
   AlertCircle,
   Loader2,
-  RefreshCw,
+  Check
 } from 'lucide-react';
-import {
-  MAX_AI_PROMPT_LENGTH,
-  MAX_EVENT_TITLE_LENGTH,
-  MAX_LOCATION_NAME_LENGTH,
-  sanitizeInput,
-  sanitizeTitle,
-  validateTitle,
-} from '../lib/sanitize';
 
 interface QuickAddProps {
   isOpen: boolean;
   onClose: () => void;
   members: FamilyMember[];
-  family?: Family | null;
+  family?: any;
   onOpenUpgrade?: () => void;
-  onConfirmAdd: (data: any) => void;
+  onConfirmAdd: (data: ExtractedRoutineData) => void;
 }
-
-type TabType = 'text' | 'audio' | 'media';
-
-const DAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
 export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   isOpen,
   onClose,
   members,
-  family,
-  onOpenUpgrade,
-  onConfirmAdd,
+  onConfirmAdd
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('text');
-
-  // Aba Texto
   const [inputText, setInputText] = useState('');
-
-  // Aba Áudio / Gravação de Voz
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<number | null>(null);
-
-  // Aba Mídia / Arquivo
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Estado Geral de Processamento com IA
   const [isParsing, setIsParsing] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [parsedResult, setParsedResult] = useState<GeminiRoutineOutput | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Estados de Cota e Créditos de IA
-  const [remainingCredits, setRemainingCredits] = useState<number | null>(null);
-  const [aiCosts, setAiCosts] = useState<{ TEXT: number; AUDIO: number; IMAGE: number; PDF: number }>({
-    TEXT: 1,
-    AUDIO: 1,
-    IMAGE: 3,
-    PDF: 10,
-  });
-  const [quotaBlocked, setQuotaBlocked] = useState<{ blocked: boolean; reason: string } | null>(null);
+  // Foto do Bilhete / Calendário
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Modalidade e Custo da Operação Atual
-  const currentModality: 'TEXT' | 'AUDIO' | 'IMAGE' | 'PDF' = useMemo(() => {
-    if (activeTab === 'text') return 'TEXT';
-    if (activeTab === 'audio') return 'AUDIO';
-    if (selectedFile) {
-      const isPdf =
-        selectedFile.type === 'application/pdf' ||
-        selectedFile.name.toLowerCase().endsWith('.pdf');
-      return isPdf ? 'PDF' : 'IMAGE';
-    }
-    return 'IMAGE';
-  }, [activeTab, selectedFile]);
+  // Ditado por Voz (Web Speech API)
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
-  const currentOperationCost = aiCosts[currentModality] || 1;
+  // Configuração da Chave Gemini
+  const [showKeyConfig, setShowKeyConfig] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState(() => getGeminiApiKey());
+  const [keySaved, setKeySaved] = useState(false);
 
-  // Limpa estados ao fechar ou reabrir e busca cotas da família
-  useEffect(() => {
-    if (!isOpen) {
-      if (isRecording) {
-        stopRecording();
-      }
-      setParsedResult(null);
-      setErrorMsg(null);
-      setQuotaBlocked(null);
-      setInputText('');
-      setSelectedFile(null);
-      setRecordingSeconds(0);
-      return;
-    }
-
-    // Carrega custos globais e saldo de créditos da família
-    async function loadQuotaData() {
-      try {
-        // 1. Busca custos configurados na plataforma
-        const { data: settings } = await supabase
-          .from('platform_settings')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (settings) {
-          setAiCosts({
-            TEXT: settings.ai_cost_text ?? 1,
-            AUDIO: settings.ai_cost_audio ?? 1,
-            IMAGE: settings.ai_cost_image ?? 3,
-            PDF: settings.ai_cost_pdf ?? 10,
-          });
-        }
-
-        // 2. Busca assinatura e créditos da família
-        if (family?.id) {
-          const { data: sub } = await supabase
-            .from('subscriptions')
-            .select('ai_credits_used, plan:plans(monthly_ai_credits)')
-            .eq('family_id', family.id)
-            .maybeSingle();
-
-          if (sub) {
-            const monthlyCredits = (sub.plan as any)?.monthly_ai_credits ?? 30;
-            const used = sub.ai_credits_used ?? 0;
-            setRemainingCredits(Math.max(0, monthlyCredits - used));
-          } else {
-            setRemainingCredits(30);
-          }
-        }
-      } catch (err) {
-        console.warn('[QuickAdd] Falha ao carregar cota de IA:', err);
-      }
-    }
-
-    loadQuotaData();
-  }, [isOpen, family?.id]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
-  // Verificação e Débito de Cota via RPC do Supabase antes de disparar Gemini
-  const checkAndConsumeQuota = async (modality: 'TEXT' | 'AUDIO' | 'IMAGE' | 'PDF'): Promise<boolean> => {
-    if (!family?.id) {
-      return true;
-    }
-
-    try {
-      const { data: quotaResult, error: quotaErr } = await supabase.rpc('consume_ai_credits', {
-        p_family_id: family.id,
-        p_modality: modality,
-      });
-
-      if (quotaErr) {
-        console.warn('[QuickAdd] Aviso na RPC consume_ai_credits:', quotaErr);
-      }
-
-      if (quotaResult && quotaResult.allowed === false) {
-        setQuotaBlocked({
-          blocked: true,
-          reason: quotaResult.reason || 'Cota de créditos de IA atingida ou modalidade indisponível no plano da sua família.',
-        });
-        return false;
-      }
-
-      // Se permitido, atualiza o saldo visual
-      if (quotaResult && typeof quotaResult.credits_remaining === 'number') {
-        setRemainingCredits(quotaResult.credits_remaining);
-      } else {
-        const cost = aiCosts[modality] || 1;
-        setRemainingCredits((prev) => (prev !== null ? Math.max(0, prev - cost) : null));
-      }
-
-      return true;
-    } catch (err: any) {
-      console.error('[QuickAdd] Erro ao invocar consume_ai_credits:', err);
-      return true;
-    }
-  };
+  // Prévia Estruturada
+  const [parsedPreview, setParsedPreview] = useState<ExtractedRoutineData | null>(null);
 
   if (!isOpen) return null;
 
-  // -------------------------------------------------------------
-  // Helpers de Correspondência de Membros
-  // -------------------------------------------------------------
-  const findMemberByName = (name: string | null | undefined): FamilyMember | null => {
-    if (!name) return null;
-    const clean = name.toLowerCase().trim();
-    return members.find((m) => m.name.toLowerCase().includes(clean)) || null;
+  const toggleListening = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert('O reconhecimento de voz não é suportado por este navegador. Digite o texto normalmente.');
+      return;
+    }
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'pt-BR';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Erro no microfone:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error('Falha ao iniciar microfone:', err);
+      setIsListening(false);
+    }
   };
 
-  const participantMember = parsedResult
-    ? findMemberByName(parsedResult.participant_name) || members[0]
-    : null;
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const responsibleMember = parsedResult
-    ? findMemberByName(parsedResult.responsible_name)
-    : null;
+    if (file.size > 8 * 1024 * 1024) {
+      alert('A imagem é muito grande. Escolha uma foto de até 8MB.');
+      return;
+    }
 
-  // -------------------------------------------------------------
-  // Ações de Extração com Gemini
-  // -------------------------------------------------------------
-  const sanitizeGeminiOutput = (raw: GeminiRoutineOutput): GeminiRoutineOutput => ({
-    ...raw,
-    title: sanitizeTitle(raw.title) || 'Atividade da Família',
-    location_name: sanitizeInput(raw.location_name, MAX_LOCATION_NAME_LENGTH),
-  });
+    setImageMimeType(file.type || 'image/jpeg');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setImagePreview(result);
+      const base64Data = result.split(',')[1];
+      setImageBase64(base64Data);
+    };
+    reader.readAsDataURL(file);
+  };
 
-  const handleExtractFromText = async () => {
-    const cleanPrompt = sanitizeInput(inputText, MAX_AI_PROMPT_LENGTH);
-    if (!cleanPrompt) return;
-    setQuotaBlocked(null);
-    setErrorMsg(null);
+  const handleRemoveImage = () => {
+    setImagePreview(null);
+    setImageBase64(null);
+    setImageMimeType(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
-    const allowed = await checkAndConsumeQuota('TEXT');
-    if (!allowed) return;
+  const handleExtractWithGemini = async () => {
+    setErrorMessage(null);
 
-    setIsParsing(true);
+    const hasKey = Boolean(getGeminiApiKey());
+    if (!hasKey) {
+      setShowKeyConfig(true);
+      return;
+    }
+
+    if (!inputText.trim() && !imageBase64) {
+      setErrorMessage('Digite uma mensagem, grave um áudio ou anexe uma foto de bilhete.');
+      return;
+    }
+
     try {
-      const data = await parseTextRoutine(cleanPrompt);
-      setParsedResult(sanitizeGeminiOutput(data));
+      setIsParsing(true);
+      const data = await extractRoutineWithGemini(
+        inputText,
+        imageBase64,
+        imageMimeType,
+        members
+      );
+      setParsedPreview(data);
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'Falha ao processar texto com a IA.');
+      console.error('Erro na extração com IA:', err);
+      setErrorMessage(err?.message || 'Falha ao processar com a IA.');
     } finally {
       setIsParsing(false);
     }
   };
 
-  const startRecording = async () => {
-    setErrorMsg(null);
-    setQuotaBlocked(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunksRef.current = [];
-
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : MediaRecorder.isTypeSupported('audio/mp4')
-        ? 'audio/mp4'
-        : '';
-
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: recorder.mimeType || 'audio/webm',
-        });
-        await processAudio(audioBlob);
-      };
-
-      recorder.start(100);
-      setIsRecording(true);
-      setRecordingSeconds(0);
-      timerRef.current = window.setInterval(() => {
-        setRecordingSeconds((prev) => prev + 1);
-      }, 1000);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg('Não foi possível acessar o microfone. Verifique as permissões do navegador.');
-    }
-  };
-
-  const stopRecording = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
-  };
-
-  const processAudio = async (blob: Blob) => {
-    setQuotaBlocked(null);
-    setErrorMsg(null);
-
-    const allowed = await checkAndConsumeQuota('AUDIO');
-    if (!allowed) return;
-
-    setIsParsing(true);
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const base64 = reader.result as string;
-          const data = await parseAudioRoutine(base64, blob.type || 'audio/webm');
-          setParsedResult(sanitizeGeminiOutput(data));
-        } catch (err: any) {
-          console.error(err);
-          setErrorMsg(err.message || 'Falha ao interpretar áudio com o Gemini.');
-        } finally {
-          setIsParsing(false);
-        }
-      };
-      reader.readAsDataURL(blob);
-    } catch (err: any) {
-      setIsParsing(false);
-      setErrorMsg('Falha ao processar arquivo de áudio.');
-    }
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSelectedFile(file);
-    setQuotaBlocked(null);
-    setErrorMsg(null);
-
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    const modality: 'PDF' | 'IMAGE' = isPdf ? 'PDF' : 'IMAGE';
-
-    const allowed = await checkAndConsumeQuota(modality);
-    if (!allowed) {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
-
-    setIsParsing(true);
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const base64 = reader.result as string;
-          const data = await parseMediaRoutine(base64, file.type);
-          setParsedResult(sanitizeGeminiOutput(data));
-        } catch (err: any) {
-          console.error(err);
-          setErrorMsg(err.message || 'Falha ao interpretar documento com a IA.');
-        } finally {
-          setIsParsing(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (err: any) {
-      setIsParsing(false);
-      setErrorMsg('Falha ao ler o arquivo selecionado.');
-    }
-  };
-
-  // -------------------------------------------------------------
-  // Confirmação e Salvamento
-  // -------------------------------------------------------------
-  const handleConfirmAndSave = () => {
-    if (!parsedResult) return;
-
-    const cleanTitle = sanitizeTitle(parsedResult.title);
-    const validation = validateTitle(cleanTitle);
-    if (!validation.isValid) {
-      setErrorMsg(validation.error || 'Título da atividade inválido.');
-      return;
-    }
-
-    const cleanLocation = sanitizeInput(parsedResult.location_name, MAX_LOCATION_NAME_LENGTH);
-
-    onConfirmAdd({
-      title: cleanTitle,
-      type: parsedResult.is_routine ? 'RECURRING' : 'SINGLE',
-      startTime: parsedResult.start_time || '18:00',
-      time: parsedResult.start_time || '18:00',
-      duration: parsedResult.duration_minutes || 60,
-      days: parsedResult.days_of_week || [],
-      date_str: parsedResult.date_str,
-      location: cleanLocation,
-      locationName: cleanLocation,
-      responsible: responsibleMember,
-      participant: participantMember,
-      participants: participantMember ? [participantMember] : [],
-      reminder_minutes: parsedResult.reminder_minutes,
-      is_all_day: parsedResult.is_all_day,
-    });
-
-    onClose();
-  };
-
-  const formatTimer = (totalSec: number) => {
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const handleSaveApiKey = () => {
+    setGeminiApiKey(apiKeyInput);
+    setKeySaved(true);
+    setTimeout(() => {
+      setKeySaved(false);
+      setShowKeyConfig(false);
+    }, 1200);
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-sky-100/80 max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-800 shadow-xs">
-              <Bot className="w-5 h-5 text-amber-700" />
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-amber-50 text-[#EA580C] rounded-xl border border-amber-200">
+              <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 leading-tight flex items-center gap-1.5">
-                Captura Rápida Multimodal
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                  Gemini IA
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500">Texto do WhatsApp, mensagem de voz ou foto/PDF</p>
+              <h2 className="text-base font-bold text-slate-900">Captura Inteligente com IA</h2>
+              <p className="text-[11px] text-slate-500 font-medium">Google Gemini 1.5 Flash Multimodal</p>
             </div>
           </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setShowKeyConfig((prev) => !prev)}
+              title="Configurar Chave do Google AI Studio"
+              className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <Key className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-600 font-bold text-lg p-1.5 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {showKeyConfig && (
+          <div className="mb-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-2">
+            <div className="flex items-center justify-between font-bold text-slate-800">
+              <span>Chave da API do Google AI Studio:</span>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-600 hover:underline text-[11px]"
+              >
+                Obter chave grátis ↗
+              </a>
+            </div>
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="Cole sua chave AIzaSy..."
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono text-xs focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleSaveApiKey}
+                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+              >
+                {keySaved ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : null}
+                {keySaved ? 'Chave salva!' : 'Salvar chave'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+          Cole a mensagem do WhatsApp, fale pelo microfone ou anexe a foto do bilhete escolar. A IA identificará o horário, o filho e o responsável.
+        </p>
+
+        <div className="relative">
+          <textarea
+            rows={3}
+            maxLength={1500}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value.slice(0, 1500))}
+            placeholder="Ex: Rafael tem natação terça e quinta às 18h no clube, eu levo"
+            className="w-full text-sm p-3.5 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:outline-hidden pr-20 bg-slate-50/50"
+          />
+
+          <div className="absolute right-2.5 bottom-3.5 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleListening}
+              title={isListening ? 'Parar gravação' : 'Ditar por voz (Microfone)'}
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isListening
+                  ? 'bg-rose-500 text-white animate-pulse shadow-md'
+                  : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+              }`}
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              capture="environment"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Tirar foto do bilhete escolar"
+              className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {imagePreview && (
+          <div className="mt-2.5 p-2 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <img
+                src={imagePreview}
+                alt="Foto do bilhete"
+                className="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0"
+              />
+              <div className="min-w-0 text-xs">
+                <p className="font-bold text-slate-800 truncate">Foto do bilhete anexada</p>
+                <p className="text-[11px] text-slate-400">A IA lerá o texto da foto</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleRemoveImage}
+              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
+              title="Remover foto"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center text-[11px] text-slate-400 mt-1 px-1">
+          <span>{isListening ? '🎙️ Ouvindo... Fale agora.' : 'Dica: Mencione quem leva e o horário'}</span>
+          <span>{inputText.length}/1500 caracteres</span>
+        </div>
+
+        {errorMessage && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {!parsedPreview && (
           <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 font-bold p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
+            type="button"
+            onClick={handleExtractWithGemini}
+            disabled={isParsing || (!inputText.trim() && !imageBase64)}
+            className="w-full mt-3 py-3 bg-[#0284C7] hover:bg-sky-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
           >
-            ✕
+            {isParsing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Analisando com Gemini 1.5 Flash...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>Interpretar Rotina com IA</span>
+              </>
+            )}
           </button>
-        </div>
-
-        {/* Abas de Navegação */}
-        {!parsedResult && (
-          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100/80 rounded-2xl mt-4 mb-4">
-            <button
-              type="button"
-              onClick={() => setActiveTab('text')}
-              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === 'text'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📝</span> Texto
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('audio')}
-              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === 'audio'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>🎙️</span> Gravar Voz
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('media')}
-              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === 'media'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📸</span> Foto / PDF
-            </button>
-          </div>
         )}
 
-        {/* Aviso em Vermelho: Bloqueio de Cota de IA */}
-        {quotaBlocked && (
-          <div className="mb-3 p-3.5 bg-red-50 border border-red-200 rounded-2xl space-y-2.5 animate-in fade-in">
-            <div className="flex items-start gap-2.5">
-              <div className="p-1.5 bg-red-100 rounded-xl text-red-600 shrink-0 mt-0.5">
-                <AlertCircle className="w-4 h-4" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-xs font-bold text-red-900 leading-tight">
-                  Limite de IA Atingido ou Modalidade Não Permitida
-                </h4>
-                <p className="text-xs text-red-700 mt-1 leading-relaxed">
-                  {quotaBlocked.reason}
-                </p>
-              </div>
+        {parsedPreview && (
+          <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <span className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-emerald-600" />
+                Confirmação dos Dados Extraídos
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">Você pode ajustar antes de salvar</span>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-1 border-t border-red-100">
-              <button
-                type="button"
-                onClick={() => setQuotaBlocked(null)}
-                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 transition-colors cursor-pointer"
-              >
-                Fechar
-              </button>
-              {onOpenUpgrade && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenUpgrade();
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">Atividade:</label>
+              <input
+                type="text"
+                maxLength={120}
+                value={parsedPreview.title}
+                onChange={(e) => setParsedPreview({ ...parsedPreview, title: e.target.value.slice(0, 120) })}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-semibold"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Participante (Filho):</label>
+                <select
+                  value={parsedPreview.participant?.id}
+                  onChange={(e) => {
+                    const sel = members.find((m) => m.id === e.target.value);
+                    if (sel) {
+                      setParsedPreview({
+                        ...parsedPreview,
+                        participant: sel,
+                        participants: [sel]
+                      });
+                    }
                   }}
-                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Fazer Upgrade de Plano</span>
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Mensagem de Erro se houver */}
-        {errorMsg && (
-          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-xs text-red-700">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
-            <span className="flex-1 leading-snug">{errorMsg}</span>
-          </div>
-        )}
-
-        {/* Conteúdo Principal com Scroll */}
-        <div className="overflow-y-auto flex-1 pr-0.5">
-          {/* MODO 1: ENTRADA DE DADOS */}
-          {!parsedResult && (
-            <div className="space-y-4">
-              {/* ABA 1: TEXTO */}
-              {activeTab === 'text' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Cole uma mensagem do WhatsApp ou digite o compromisso.
-                    </p>
-                    <span
-                      className={`text-[11px] font-semibold transition-colors ${
-                        inputText.length >= MAX_AI_PROMPT_LENGTH
-                          ? 'text-rose-600 font-bold'
-                          : inputText.length >= 800
-                          ? 'text-amber-600'
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {inputText.length}/{MAX_AI_PROMPT_LENGTH}
-                    </span>
-                  </div>
-                  <textarea
-                    rows={4}
-                    maxLength={MAX_AI_PROMPT_LENGTH}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value.slice(0, MAX_AI_PROMPT_LENGTH))}
-                    placeholder="Ex: Rafael tem aula de natação terça e quinta às 18h no clube, a Silvia leva."
-                    className="w-full text-xs font-medium p-3.5 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 focus:outline-none transition-all resize-none"
-                    disabled={isParsing}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleExtractFromText}
-                    disabled={isParsing || !inputText.trim()}
-                    className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold rounded-xl text-xs transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {isParsing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Processando com Gemini...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        <span>Interpretar Texto com IA</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* ABA 2: ÁUDIO */}
-              {activeTab === 'audio' && (
-                <div className="p-6 bg-slate-50 border border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center text-center space-y-3">
-                  <div
-                    className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
-                      isRecording
-                        ? 'bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/30 ring-4 ring-rose-100'
-                        : isParsing
-                        ? 'bg-amber-100 text-amber-700 animate-spin'
-                        : 'bg-white text-slate-700 border border-slate-200 shadow-xs'
-                    }`}
-                  >
-                    {isParsing ? (
-                      <RefreshCw className="w-7 h-7" />
-                    ) : (
-                      <Mic className="w-7 h-7" />
-                    )}
-                  </div>
-
-                  {isRecording ? (
-                    <div>
-                      <span className="text-rose-600 font-mono font-bold text-sm">
-                        Gravando: {formatTimer(recordingSeconds)}
-                      </span>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Fale normalmente (ex: "Consulta do Flávio sexta às 15 horas")
-                      </p>
-                    </div>
-                  ) : isParsing ? (
-                    <div>
-                      <span className="text-slate-800 font-bold text-xs">
-                        Gemini analisando o áudio...
-                      </span>
-                      <p className="text-[11px] text-slate-500">Transcrevendo e estruturando a rotina</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">
-                        Clique para gravar sua voz
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        O áudio será enviado diretamente para a IA multimodal do Gemini
-                      </p>
-                    </div>
-                  )}
-
-                  {!isParsing && (
-                    <div className="pt-2">
-                      {!isRecording ? (
-                        <button
-                          type="button"
-                          onClick={startRecording}
-                          className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
-                        >
-                          <Mic className="w-4 h-4" />
-                          <span>Iniciar Gravação</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={stopRecording}
-                          className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
-                        >
-                          <Square className="w-4 h-4 fill-white" />
-                          <span>Concluir e Enviar</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ABA 3: FOTO / PDF */}
-              {activeTab === 'media' && (
-                <div className="space-y-3">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="p-6 bg-slate-50 border-2 border-dashed border-slate-300 hover:border-sky-400 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*,application/pdf"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      disabled={isParsing}
-                    />
-                    <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 group-hover:border-sky-300 group-hover:bg-sky-50 flex items-center justify-center text-slate-600 group-hover:text-sky-600 transition-all shadow-xs mb-2">
-                      <Upload className="w-6 h-6" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-800">
-                      {selectedFile ? selectedFile.name : 'Selecionar Foto ou PDF'}
-                    </span>
-                    <span className="text-[11px] text-slate-500 mt-0.5">
-                      Bilhetes de escola, horários, receitas ou avisos
-                    </span>
-                  </div>
-
-                  {isParsing && (
-                    <div className="flex items-center justify-center gap-2 py-3 text-xs font-semibold text-slate-600">
-                      <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
-                      <span>Analisando imagem com visão computacional do Gemini...</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* MODO 2: CARD DE CONFIRMAÇÃO COM BADGES COLORIDOS */}
-          {parsedResult && (
-            <div className="space-y-4 animate-in fade-in zoom-in-95 duration-150">
-              <div className="p-4 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    Atividade Interpretada
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    {parsedResult.is_routine ? 'Rotina Recorrente' : 'Evento Único'}
-                  </span>
-                </div>
-
-                {/* Título da Atividade com Ajuste Fino e Contador */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                      Título da Atividade
-                    </label>
-                    <span
-                      className={`text-[10px] font-semibold transition-colors ${
-                        (parsedResult.title || '').length >= MAX_EVENT_TITLE_LENGTH
-                          ? 'text-rose-600 font-bold'
-                          : (parsedResult.title || '').length >= 80
-                          ? 'text-amber-600'
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {(parsedResult.title || '').length}/{MAX_EVENT_TITLE_LENGTH}
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    maxLength={MAX_EVENT_TITLE_LENGTH}
-                    value={parsedResult.title}
-                    onChange={(e) => {
-                      const updated = e.target.value.slice(0, MAX_EVENT_TITLE_LENGTH);
-                      setParsedResult((prev) => (prev ? { ...prev, title: updated } : null));
-                    }}
-                    placeholder="Nome da atividade..."
-                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-sm font-bold text-slate-900 transition-all bg-white"
-                  />
-                </div>
-
-                {/* Membros Identificados com Badges Coloridos */}
-                <div className="space-y-2 pt-1">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-slate-500 font-medium min-w-[90px]">Participante:</span>
-                    {participantMember ? (
-                      <span
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border shadow-2xs"
-                        style={{
-                          backgroundColor: `${participantMember.color}15`,
-                          borderColor: `${participantMember.color}40`,
-                          color: participantMember.color,
-                        }}
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: participantMember.color }}
-                        />
-                        {participantMember.name} ({participantMember.role})
-                      </span>
-                    ) : (
-                      <span className="text-slate-600 font-semibold">{parsedResult.participant_name}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-slate-500 font-medium min-w-[90px]">Responsável:</span>
-                    {responsibleMember ? (
-                      <span
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border shadow-2xs"
-                        style={{
-                          backgroundColor: `${responsibleMember.color}15`,
-                          borderColor: `${responsibleMember.color}40`,
-                          color: responsibleMember.color,
-                        }}
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: responsibleMember.color }}
-                        />
-                        {responsibleMember.name} (Leva / Busca)
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 italic font-medium bg-slate-200/60 px-2 py-0.5 rounded-md text-[11px]">
-                        Não definido (atribuir depois)
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Detalhes de Agenda e Local */}
-                <div className="pt-2 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-xs text-slate-700">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>
-                      <strong>{parsedResult.start_time}</strong> ({parsedResult.duration_minutes} min)
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">{parsedResult.location_name || 'Local da Família'}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 col-span-2">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>
-                      {parsedResult.is_routine && parsedResult.days_of_week?.length > 0 ? (
-                        <>
-                          <strong>Dias:</strong>{' '}
-                          {parsedResult.days_of_week.map((d) => DAY_LABELS[d] || d).join(', ')}
-                        </>
-                      ) : (
-                        <>
-                          <strong>Data:</strong> {parsedResult.date_str || 'Data atual'}
-                        </>
-                      )}
-                    </span>
-                  </div>
-                </div>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nickname || m.name} ({m.role})
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Botões de Ação */}
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleConfirmAndSave}
-                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Responsável (Leva/Busca):</label>
+                <select
+                  value={parsedPreview.responsible?.id}
+                  onChange={(e) => {
+                    const sel = members.find((m) => m.id === e.target.value);
+                    if (sel) setParsedPreview({ ...parsedPreview, responsible: sel });
+                  }}
+                  className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>Confirmar e Salvar</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setParsedResult(null)}
-                  className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs border border-slate-200 transition-all cursor-pointer"
-                >
-                  Voltar / Corrigir
-                </button>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nickname || m.name} ({m.role})
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Rodapé com Saldo Transparente de Créditos */}
-        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-          <div className="flex items-center flex-wrap gap-1.5 text-[11px] sm:text-xs text-slate-500 font-medium">
-            <span className="text-amber-500 font-bold">⚡ Saldo:</span>
-            <span className="font-bold text-slate-700">
-              {remainingCredits !== null ? remainingCredits : '--'} créditos restantes este mês
-            </span>
-            <span className="text-slate-300 hidden sm:inline">•</span>
-            <span className="text-slate-500">
-              Esta operação consome <strong className="text-indigo-600 font-bold">{currentOperationCost}</strong> {currentOperationCost === 1 ? 'crédito' : 'créditos'}
-            </span>
-          </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Horário de Início:</label>
+                <input
+                  type="time"
+                  value={parsedPreview.time}
+                  onChange={(e) =>
+                    setParsedPreview({
+                      ...parsedPreview,
+                      time: e.target.value,
+                      startTime: e.target.value
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-mono"
+                />
+              </div>
 
-          {!parsedResult && (
-            <div className="flex justify-end shrink-0">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Duração (minutos):</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={480}
+                  value={parsedPreview.duration}
+                  onChange={(e) =>
+                    setParsedPreview({
+                      ...parsedPreview,
+                      duration: Number(e.target.value) || 60
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">Local:</label>
+              <input
+                type="text"
+                maxLength={80}
+                value={parsedPreview.location}
+                onChange={(e) => setParsedPreview({ ...parsedPreview, location: e.target.value.slice(0, 80) })}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
+            <div className="pt-2 flex gap-2">
               <button
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-slate-500 hover:text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer"
+                onClick={() => {
+                  onConfirmAdd({
+                    ...parsedPreview,
+                    startTime: parsedPreview.time,
+                    participants: [parsedPreview.participant]
+                  });
+                  onClose();
+                }}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors shadow-2xs cursor-pointer"
               >
-                Cancelar
+                Confirmar e Adicionar à Rotina
+              </button>
+              <button
+                type="button"
+                onClick={() => setParsedPreview(null)}
+                className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Editar Texto
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
