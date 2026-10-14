@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.5.8-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v2.0.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,20 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v2.0.0] — 2026-10-14
+#### 🚀 Versão Oficial de Produção 2.0 & Sistema de Atualização Contínua do PWA
+- **Detecção Ativa e Imediata de Atualizações (`usePwaUpdate.ts`):**
+  - O app consulta `/version.json` a cada 15 minutos e **instantaneamente quando o usuário desbloqueia o celular ou retorna ao app** (`visibilitychange` e evento `online`).
+  - Função `reloadApp()` que limpa o Cache Storage do Service Worker e recarrega a página de forma fluida.
+- **Gerador Automático de Versão no Build (`vite.config.ts`):**
+  - Plugin Vite `generate-pwa-version-json` gerando `/public/version.json` com `version: "2.0.0"` e timestamp `buildTime` a cada execução do build.
+- **Regras Estritas de Não-Cache no Servidor (`nginx.conf`):**
+  - Diretiva `Cache-Control: no-store, no-cache, must-revalidate, max-age=0` garantindo que `version.json`, `index.html` e `manifest.json` nunca fiquem cacheados em proxies ou navegadores móveis (iOS Safari / Android Chrome).
+- **Interface e Ergonomia Mobile (`Header.tsx` e `App.tsx`):**
+  - Tag discreta `v2.0.0` no cabeçalho ao lado do logotipo.
+  - Alerta pulsante `🟢 Novo Update` no cabeçalho quando uma nova versão for detectada.
+  - Banner ergonômico na parte inferior da tela (zona do polegar) avisando sobre a nova versão com botão `[ Atualizar ]`.
 
 ### [v1.5.8] — 2026-10-14
 #### 📅 Navegação Temporal no Resumo Familiar & Cancelamento Pontual de Atividades

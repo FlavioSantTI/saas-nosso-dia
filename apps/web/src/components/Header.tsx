@@ -13,7 +13,9 @@ import {
   MoreVertical,
   ShieldCheck,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
+import { APP_VERSION } from '../constants/version';
 
 interface HeaderProps {
   family: Family;
@@ -28,6 +30,8 @@ interface HeaderProps {
   onLogout: () => Promise<void>;
   onOpenAdmin?: () => void;
   hasActiveAlert?: boolean;
+  hasUpdate?: boolean;
+  onReloadApp?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +47,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onOpenAdmin,
   hasActiveAlert = false,
+  hasUpdate = false,
+  onReloadApp,
 }) => {
   const [logoError, setLogoError] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -108,9 +114,27 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="text-sm sm:text-lg font-bold tracking-tight text-slate-800 leading-tight truncate">
-              Nosso Dia
-            </h1>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1 className="text-sm sm:text-lg font-bold tracking-tight text-slate-800 leading-tight truncate">
+                Nosso Dia
+              </h1>
+              {/* Tag de Versão PWA */}
+              {!hasUpdate ? (
+                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">
+                  v{APP_VERSION}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onReloadApp}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded-full transition-colors animate-pulse cursor-pointer shrink-0"
+                  title="Nova versão disponível! Toque para atualizar"
+                >
+                  <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                  <span>Novo Update</span>
+                </button>
+              )}
+            </div>
             <p className="text-[10px] sm:text-xs text-slate-500 font-medium truncate max-w-[90px] sm:max-w-xs">
               {family.name}
             </p>

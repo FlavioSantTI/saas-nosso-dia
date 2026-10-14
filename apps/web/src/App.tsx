@@ -21,6 +21,7 @@ import { getMemberDisplayName } from './lib/formatters';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { LandingPage } from './components/LandingPage';
 import { sanitizeTitle } from './lib/sanitize';
+import { usePwaUpdate } from './lib/usePwaUpdate';
 import {
   extractLiteralDate,
   extractLiteralTime,
@@ -369,6 +370,7 @@ const syncFutureRoutinesInBackground = async (familyId: string, routines: any[])
 };
 
 export const App: React.FC = () => {
+  const { hasUpdate, latestVersion, reloadApp } = usePwaUpdate();
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -1628,6 +1630,8 @@ export const App: React.FC = () => {
         onLogout={handleLogout}
         onOpenAdmin={handleOpenAdmin}
         hasActiveAlert={!!activeToastNotification}
+        hasUpdate={hasUpdate}
+        onReloadApp={reloadApp}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
@@ -1858,6 +1862,26 @@ export const App: React.FC = () => {
           currentUser={currentUser}
           isSuperAdminProp={isSuperAdmin}
         />
+      )}
+
+      {/* Banner Flutuante de Atualização PWA na Zona do Polegar */}
+      {hasUpdate && (
+        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-800 z-50 flex items-center justify-between gap-3 animate-slide-up">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-xl shrink-0">🚀</span>
+            <div className="min-w-0">
+              <p className="font-bold text-xs truncate">Nova versão disponível (v{latestVersion})!</p>
+              <p className="text-[11px] text-slate-400 truncate">Toque para carregar as melhorias recentes.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={reloadApp}
+            className="px-3.5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
+          >
+            Atualizar
+          </button>
+        </div>
       )}
     </div>
   );
