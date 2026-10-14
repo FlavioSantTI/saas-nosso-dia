@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { KeyRound, UserCheck, Copy, Check, RefreshCw, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import { KeyRound, UserCheck, Copy, Check, RefreshCw, Search, ShieldCheck, Sparkles, Users, Home } from 'lucide-react';
+
+interface AdminFamilyOption {
+  id: string;
+  name: string;
+  members_count: number;
+}
 
 interface AdminUserRow {
   id: string;
@@ -10,20 +16,55 @@ interface AdminUserRow {
   is_confirmed: boolean;
 }
 
-export const AdminUserManagement: React.FC = () => {
-  const [email, setEmail] = useState('');
+interface AdminUserManagementProps {
+  initialEmail?: string;
+  onSuccess?: (email: string) => void;
+  className?: string;
+}
+
+export const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
+  initialEmail = '',
+  onSuccess,
+  className = '',
+}) => {
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [selectedFamilyId, setSelectedFamilyId] = useState('');
+  const [role, setRole] = useState<'ADMIN' | 'MEMBER'>('ADMIN');
+
+  const [families, setFamilies] = useState<AdminFamilyOption[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
-    credentials?: { email: string; password: string };
+    credentials?: { email: string; password: string; name: string; familyName: string };
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [search, setSearch] = useState('');
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+
+  useEffect(() => {
+    if (initialEmail) {
+      setEmail(initialEmail);
+    }
+  }, [initialEmail]);
+
+  const loadFamilies = async () => {
+    try {
+      const { data, error } = await supabase.rpc('admin_list_families');
+      if (!error && Array.isArray(data)) {
+        setFamilies(data);
+        if (data.length > 0 && !selectedFamilyId) {
+          setSelectedFamilyId(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao carregar famílias:', err);
+    }
+  };
 
   const fetchUsers = async (term = '') => {
     try {
@@ -42,6 +83,7 @@ export const AdminUserManagement: React.FC = () => {
   };
 
   useEffect(() => {
+    loadFamilies();
     fetchUsers();
   }, []);
 
@@ -52,17 +94,18 @@ export const AdminUserManagement: React.FC = () => {
     setPassword(`${prefix}${num}!`);
   };
 
-  const handleActivateAndSetPassword = async (e: React.FormEvent) => {
+  const handleCreateAndLinkUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
+    const cleanName = name.trim();
 
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setFeedback({ type: 'error', message: 'Informe um e-mail válido.' });
       return;
     }
     if (cleanPassword.length < 6) {
-      setFeedback({ type: 'error', message: 'A senha deve ter pelo menos 6 caracteres.' });
+      setFeedback({ type: 'error', message: 'A senha deve conter no mínimo 6 caracteres.' });
       return;
     }
 
@@ -71,45 +114,56 @@ export const AdminUserManagement: React.FC = () => {
       setFeedback(null);
       setCopied(false);
 
-      const { data, error } = await supabase.rpc('admin_set_user_credentials', {
+      const { data, error } = await supabase.rpc('admin_create_and_link_user', {
         p_target_email: cleanEmail,
-        p_new_password: cleanPassword
+        p_new_password: cleanPassword,
+        p_family_id: selectedFamilyId || null,
+        p_member_name: cleanName || null,
+        p_role: role
       });
 
       if (error) throw error;
 
+      const familyObj = families.find((f) => f.id === selectedFamilyId);
+
       setFeedback({
         type: 'success',
-        message: (data as any)?.message || 'Conta ativada e senha definida com sucesso!',
-        credentials: { email: cleanEmail, password: cleanPassword }
+        message: data?.message || 'Usuário criado, ativado e vinculado à família com sucesso!',
+        credentials: {
+          email: cleanEmail,
+          password: cleanPassword,
+          name: cleanName || cleanEmail.split('@')[0],
+          familyName: data?.family_name || familyObj?.name || 'Sua Família'
+        }
       });
 
+      if (onSuccess) {
+        onSuccess(cleanEmail);
+      }
+
       fetchUsers(search);
+      loadFamilies();
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        message: err?.message || 'Falha ao definir credenciais do usuário.'
+        message: err?.message || 'Falha ao processar cadastro do usuário.'
       });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleCopyWhatsAppMessage = async () => {
+  const handleCopyWhatsAppMessage = () => {
     if (!feedback?.credentials) return;
-    // URL em texto puro (sem sintaxe Markdown) para o WhatsApp reconhecer o link corretamente
-    const msg = `Oi! Já deixei seu acesso pronto no *Nosso Dia*.\n\n📱 *Link:* https://nossodia.flaviosantiago.com.br\n📧 *Seu e-mail:* ${feedback.credentials.email}\n🔑 *Sua senha:* ${feedback.credentials.password}\n\nÉ só abrir o link, colocar esse e-mail e senha e entrar. Não precisa confirmar nada no e-mail!`;
-    try {
-      await navigator.clipboard.writeText(msg);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    } catch (err) {
-      console.error('Falha ao copiar para a área de transferência:', err);
-    }
+    const { name: userName, email: userEmail, password: userPw, familyName } = feedback.credentials;
+    const msg = `Oi, ${userName}! Já deixei seu acesso pronto no *Nosso Dia* (${familyName}).\n\n📱 *Link:* https://nossodia.flaviosantiago.com.br\n📧 *Seu e-mail:* ${userEmail}\n🔑 *Sua senha:* ${userPw}\n\nÉ só abrir o link, colocar esse e-mail e senha e entrar. Não precisa confirmar nada no e-mail!`;
+    navigator.clipboard.writeText(msg);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
   };
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${className}`}>
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs">
         <div className="flex items-center gap-2.5 mb-2">
           <div className="p-2 rounded-xl bg-sky-50 text-sky-700">
@@ -117,16 +171,16 @@ export const AdminUserManagement: React.FC = () => {
           </div>
           <div>
             <h3 className="text-base font-bold text-slate-900">
-              Ativação Direta e Alteração de Senha (Sem E-mail)
+              Cadastrar / Ativar Usuário e Vincular à Família
             </h3>
             <p className="text-xs text-slate-500">
-              Ative ou redefina a senha de qualquer usuário instantaneamente, sem precisar que ele clique em links de confirmação.
+              Cria o login ativo no Auth, define a senha direta e vincula imediatamente ao perfil da família selecionada.
             </p>
           </div>
         </div>
 
-        <form onSubmit={handleActivateAndSetPassword} className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-3">
-          <div className="md:col-span-5">
+        <form onSubmit={handleCreateAndLinkUser} className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-3.5">
+          <div className="md:col-span-6">
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               E-mail do Usuário
             </label>
@@ -136,22 +190,70 @@ export const AdminUserManagement: React.FC = () => {
               maxLength={120}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="usuario@exemplo.com"
+              placeholder="silvia.vilar@gmail.com"
               className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
             />
+          </div>
+
+          <div className="md:col-span-6">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Nome / Apelido no App
+            </label>
+            <input
+              type="text"
+              maxLength={80}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Silvia Vilar"
+              className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
+            />
+          </div>
+
+          <div className="md:col-span-5">
+            <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+              <Home className="w-3.5 h-3.5 text-slate-400" />
+              Vincular à Família
+            </label>
+            <select
+              value={selectedFamilyId}
+              onChange={(e) => setSelectedFamilyId(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
+            >
+              {families.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({f.members_count} membros)
+                </option>
+              ))}
+              {families.length === 0 && <option value="">Nenhuma família encontrada</option>}
+            </select>
+          </div>
+
+          <div className="md:col-span-3">
+            <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+              <Users className="w-3.5 h-3.5 text-slate-400" />
+              Papel na Família
+            </label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as 'ADMIN' | 'MEMBER')}
+              className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
+            >
+              <option value="ADMIN">Administrador (Pai/Mãe)</option>
+              <option value="MEMBER">Membro da Família</option>
+            </select>
           </div>
 
           <div className="md:col-span-4">
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-semibold text-slate-700">
-                Nova Senha Direta
+                Senha Direta
               </label>
               <button
                 type="button"
                 onClick={handleGenerateFriendlyPassword}
                 className="text-[11px] font-semibold text-sky-700 hover:underline flex items-center gap-1"
               >
-                <Sparkles className="w-3 h-3" /> Gerar senha fácil
+                <Sparkles className="w-3 h-3" /> Gerar senha
               </button>
             </div>
             <input
@@ -166,21 +268,21 @@ export const AdminUserManagement: React.FC = () => {
             />
           </div>
 
-          <div className="md:col-span-3 flex items-end">
+          <div className="md:col-span-12 pt-2">
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 px-4 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3 px-4 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <UserCheck className="w-4 h-4" />
-              {isSubmitting ? 'Processando...' : 'Ativar & Salvar Senha'}
+              {isSubmitting ? 'Processando...' : 'Criar Acesso, Ativar e Vincular à Família'}
             </button>
           </div>
         </form>
 
         {feedback && (
           <div
-            className={`mt-4 p-4 rounded-xl border text-xs ${
+            className={`mt-5 p-4 rounded-xl border text-xs ${
               feedback.type === 'success'
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                 : 'bg-red-50 border-red-200 text-red-800'
@@ -191,7 +293,9 @@ export const AdminUserManagement: React.FC = () => {
                 <p className="font-bold text-sm">{feedback.message}</p>
                 {feedback.credentials && (
                   <p className="mt-1 text-emerald-800">
-                    E-mail: <strong>{feedback.credentials.email}</strong> | Senha:{' '}
+                    Familiar: <strong>{feedback.credentials.name}</strong> | Família:{' '}
+                    <strong>{feedback.credentials.familyName}</strong> | E-mail:{' '}
+                    <strong>{feedback.credentials.email}</strong> | Senha:{' '}
                     <strong className="font-mono">{feedback.credentials.password}</strong>
                   </p>
                 )}
@@ -201,7 +305,7 @@ export const AdminUserManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCopyWhatsAppMessage}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center gap-1.5 shrink-0 shadow-2xs"
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center gap-1.5 shrink-0 shadow-2xs cursor-pointer"
                 >
                   {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   {copied ? 'Copiado para o WhatsApp!' : 'Copiar Acesso para WhatsApp'}
@@ -237,7 +341,7 @@ export const AdminUserManagement: React.FC = () => {
             <button
               type="button"
               onClick={() => fetchUsers(search)}
-              className="p-1.5 text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg"
+              className="p-1.5 text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg cursor-pointer"
               title="Atualizar lista"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoadingUsers ? 'animate-spin' : ''}`} />
@@ -281,7 +385,7 @@ export const AdminUserManagement: React.FC = () => {
                         handleGenerateFriendlyPassword();
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      className="text-sky-700 hover:underline font-semibold"
+                      className="text-sky-700 hover:underline font-semibold cursor-pointer"
                     >
                       Trocar Senha / Ativar
                     </button>
@@ -302,3 +406,5 @@ export const AdminUserManagement: React.FC = () => {
     </div>
   );
 };
+
+export default AdminUserManagement;
