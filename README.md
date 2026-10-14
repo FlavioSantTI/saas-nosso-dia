@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v1.5.7-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v1.5.8-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -189,6 +189,27 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v1.5.8] — 2026-10-14
+#### 📅 Navegação Temporal no Resumo Familiar & Cancelamento Pontual de Atividades
+- **Navegação Temporal Completa (`DailyBriefingCard.tsx`):**
+  - **Acesso Rápido na Zona do Polegar:** Botões `[ Hoje ]`, `[ Amanhã ]`, setas de navegação dia-a-dia (`<` e `>`) e seletor nativo de data (`<input type="date">`).
+  - **Cabeçalho Contextual Inteligente:**
+    - Se for Hoje: `☀️ Resumo Familiar de Hoje`
+    - Se for Amanhã: `🌙 Preparação para Amanhã`
+    - Se for outra data: `📅 Planejamento Familiar de {Data}`
+  - **Métricas Rápidas de Logística:** Contagem consolidada de atividades ativas, divisão por responsável e alerta proeminente para atividades sem responsável com atalho de atribuição.
+  - **Exportação Rápida para WhatsApp:** Cópia com 1 clique do relatório do dia formatado com horários, participantes, locais e responsáveis para compartilhamento familiar.
+  - **Ações Integradas no Card:**
+    - `CalendarX`: cancelamento pontual restrito à data da ocorrência (`cancelEventInstance`), sem afetar a rotina nas próximas semanas.
+    - `Undo2`: reativação pontual de atividade previamente cancelada (`reactivateEventInstance`).
+    - `BellRing`: disparo de download do alarme nativo de calendário (`.ics`) compatível com celulares.
+- **Helpers de Navegação Temporal e RPCs (`lib/supabase.ts`):**
+  - `shiftDateString(dateStr, days)`: soma ou subtrai N dias de uma data `YYYY-MM-DD` com segurança contra fusos horários.
+  - `getFriendlyDateLabel(dateStr, todayStr)`: gera rótulos contextuais em português (`Resumo Familiar de Hoje`, `Preparação para Amanhã`, datas por extenso).
+  - `cancelEventInstance(eventId)` e `reactivateEventInstance(eventId)`: integração com RPCs Supabase `rpc_cancel_event_instance` / `rpc_reactivate_event_instance` com fallback resiliente para atualização de status.
+- **Tipagem Expandida (`types/index.ts`):**
+  - Adicionadas interfaces `DailyBriefingItem` e `DailyBriefingParticipant` para estruturação do briefing diário.
 
 ### [v1.5.7] — 2026-10-13
 #### 🕒 Correção Definitiva de Horários Literais, Sumiço Noturno (21h) e Duplicatas

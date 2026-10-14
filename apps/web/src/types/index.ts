@@ -122,3 +122,28 @@ export interface AdminUserListItem {
   is_super_admin: boolean;
   family_name: string;
 }
+
+export interface DailyBriefingParticipant {
+  id: string;
+  name: string;
+  color: string;
+  role?: MemberRole;
+}
+
+export interface DailyBriefingItem {
+  event_id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  start_time_local: string;
+  end_time_local: string;
+  is_all_day: boolean;
+  status: EventStatus;
+  location_name: string | null;
+  location_address: string | null;
+  responsible_id: string | null;
+  responsible_name: string | null;
+  responsible_color: string | null;
+  participants: DailyBriefingParticipant[];
+  has_conflict: boolean;
+}

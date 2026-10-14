@@ -1,378 +1,491 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { EventItem, FamilyMember } from '../types';
-import { getMemberDisplayName } from '../lib/formatters';
-import {
-  extractLiteralTime,
-  extractLiteralDate,
-  toLocalDateString,
-  FAMILY_TIMEZONE,
-} from '../lib/dateUtils';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { DailyBriefingItem } from '../types';
 import {
-  Clock,
+  extractLiteralDate,
+  extractLiteralTime,
+  getLocalDateString,
+  shiftDateString,
+  getFriendlyDateLabel,
+  deduplicateAndCleanEvents,
+  downloadNativeAlarmIcs,
+  cancelEventInstance,
+  reactivateEventInstance
+} from '../lib/supabase';
+import {
+  Sun,
+  Moon,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
   MapPin,
-  Users,
-  ChevronDown,
-  ChevronUp,
-  Sparkles,
+  User,
+  AlertCircle,
+  Share2,
+  Check,
+  BellRing,
+  CalendarX,
+  Undo2
 } from 'lucide-react';
 
 interface DailyBriefingCardProps {
   familyId?: string;
-  events: EventItem[];
-  members: FamilyMember[];
-  currentMember?: FamilyMember | null;
-  onCardClick?: (event: EventItem) => void;
+  responsibleFilterId?: string | null;
+  refreshTrigger?: number;
+  events?: any[];
+  members?: any[];
+  currentMember?: any;
+  onCardClick?: (event: any) => void;
   onOpenSummary?: (tab?: 'today' | 'week') => void;
+  onEventsChanged?: () => void;
+  onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
   familyId,
-  events,
-  members,
-  currentMember,
-  onCardClick,
-  onOpenSummary,
+  responsibleFilterId,
+  refreshTrigger,
+  onEventsChanged,
+  onNotify
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [rpcEvents, setRpcEvents] = useState<EventItem[] | null>(null);
+  const todayStr = getLocalDateString();
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [items, setItems] = useState<DailyBriefingItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
 
-  // Identifica o membro ativo (preferencialmente logado ou primeiro adulto)
-  const activeMember = useMemo(() => {
-    if (currentMember) return currentMember;
-    const firstAdult = members.find((m) => m.role !== 'CHILD');
-    return firstAdult || members[0] || null;
-  }, [currentMember, members]);
+  const dateLabel = getFriendlyDateLabel(selectedDate, todayStr);
 
-  // Data atual de referência no relógio local (evita sumiço às 21h)
-  const todayStr = useMemo(() => toLocalDateString(), []);
-
-  // Saudação de acordo com o turno no fuso local
-  const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return '☀️ Bom dia';
-    if (hour < 18) return '🌤️ Boa tarde';
-    return '🌙 Boa noite';
-  }, []);
-
-  // Data por extenso no fuso de Palmas: "Hoje é [Dia da semana], [Dia] de [Mês]"
-  const formattedToday = useMemo(() => {
-    const todayDate = new Date();
-    try {
-      const weekday = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', timeZone: FAMILY_TIMEZONE }).format(todayDate);
-      const day = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', timeZone: FAMILY_TIMEZONE }).format(todayDate);
-      const month = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: FAMILY_TIMEZONE }).format(todayDate);
-      const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-      return `Hoje é ${capWeekday}, ${day} de ${month}`;
-    } catch {
-      return `Hoje, ${todayStr}`;
-    }
-  }, [todayStr]);
-
-  // Consumo da RPC rpc_get_family_daily_briefing com fallback gracioso
-  useEffect(() => {
-    let isMounted = true;
+  const loadBriefing = async () => {
     if (!familyId) return;
+    try {
+      setIsLoading(true);
+      setErrorMsg(null);
 
-    async function loadBriefingFromRpc() {
-      try {
-        const { data, error } = await supabase.rpc('rpc_get_family_daily_briefing', {
-          p_family_id: familyId,
-          p_target_date: todayStr,
-        });
+      const { data: rawEvents, error: queryError } = await supabase
+        .from('events')
+        .select(`
+          id,
+          family_id,
+          routine_id,
+          title,
+          start_time,
+          end_time,
+          is_all_day,
+          status,
+          location_id,
+          responsible_id,
+          locations ( id, name, address ),
+          responsible:family_members!events_responsible_id_fkey ( id, name, nickname, color, role ),
+          event_participants (
+            member_id,
+            family_members ( id, name, nickname, color, role )
+          )
+        `)
+        .eq('family_id', familyId);
 
-        if (error) {
-          // Erro esperado se anônimo ou sem permissão na RPC, fallback local
-          return;
-        }
+      if (queryError) throw queryError;
 
-        if (data && isMounted) {
-          // RPC pode retornar array de atividades ou objeto com lista
-          let rawList: any[] = [];
-          if (Array.isArray(data)) {
-            rawList = data;
-          } else if (Array.isArray((data as any).events)) {
-            rawList = (data as any).events;
-          } else if (Array.isArray((data as any).activities)) {
-            rawList = (data as any).activities;
-          }
+      const dayEvents = (rawEvents || []).filter(
+        (e: Record<string, any>) => extractLiteralDate(e.start_time) === selectedDate
+      );
 
-          if (rawList.length > 0) {
-            // Mapeia eventos da RPC mantendo referências e integridade com o estado local
-            const mappedEvents: EventItem[] = rawList.map((item: any) => {
-              const matchedLocal = events.find((e) => e.id === item.id);
-              return {
-                id: item.id || matchedLocal?.id || `rpc_${Math.random()}`,
-                family_id: item.family_id || familyId,
-                routine_id: item.routine_id || matchedLocal?.routine_id,
-                title: item.title || matchedLocal?.title || 'Atividade',
-                start_time: item.start_time || matchedLocal?.start_time || new Date().toISOString(),
-                end_time: item.end_time || matchedLocal?.end_time || new Date().toISOString(),
-                is_all_day: item.is_all_day !== undefined ? item.is_all_day : (matchedLocal?.is_all_day || false),
-                location_id: item.location_id || matchedLocal?.location_id,
-                responsible_id: item.responsible_id || matchedLocal?.responsible_id,
-                status: item.status || matchedLocal?.status || 'SCHEDULED',
-                notes: item.notes || matchedLocal?.notes,
-                reminder_minutes: item.reminder_minutes !== undefined ? item.reminder_minutes : matchedLocal?.reminder_minutes,
-                location: item.location || (item.location_name ? { id: item.location_id || '', family_id: familyId, name: item.location_name } : matchedLocal?.location),
-                responsible: item.responsible || matchedLocal?.responsible || (item.responsible_id ? members.find((m) => m.id === item.responsible_id) : null),
-                participants: item.participants && Array.isArray(item.participants) && item.participants.length > 0 && typeof item.participants[0] === 'object'
-                  ? item.participants
-                  : matchedLocal?.participants || (item.participant_ids ? members.filter((m) => item.participant_ids.includes(m.id)) : []),
-              };
-            });
-            setRpcEvents(mappedEvents);
-          }
-        }
-      } catch (err) {
-        console.warn('Fallback para briefing local:', err);
-      }
-    }
+      const cleanEvents = deduplicateAndCleanEvents(dayEvents);
 
-    loadBriefingFromRpc();
+      const mapped: DailyBriefingItem[] = cleanEvents.map((e: Record<string, any>) => {
+        const loc = Array.isArray(e.locations) ? e.locations[0] : e.locations;
+        const resp = Array.isArray(e.responsible) ? e.responsible[0] : e.responsible;
+        const startLocal = extractLiteralTime(e.start_time);
+        const endLocal = extractLiteralTime(e.end_time);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [familyId, todayStr, events, members]);
+        const participants = (e.participants || []).map((p: Record<string, any>) => ({
+          id: String(p.id),
+          name: String(p.nickname || p.name),
+          color: String(p.color || '#0284C7'),
+          role: p.role
+        }));
 
-  // Filtra eventos de HOJE considerando a data nominal/literal
-  const localTodayEvents = useMemo(() => {
-    return events.filter((e) => {
-      if (!e.start_time) return false;
-      return extractLiteralDate(e.start_time) === todayStr;
-    });
-  }, [events, todayStr]);
-
-  // Se a RPC retornou eventos válidos, usa-os; caso contrário, usa o filtro local
-  const todayEvents = useMemo(() => {
-    if (rpcEvents && rpcEvents.length > 0) {
-      return rpcEvents;
-    }
-    return localTodayEvents;
-  }, [rpcEvents, localTodayEvents]);
-
-  // Atividades de HOJE sob a responsabilidade do membro ativo
-  const myTodayEvents = useMemo(() => {
-    if (!activeMember) return [];
-    return todayEvents
-      .filter((e) => e.responsible_id === activeMember.id)
-      .sort((a, b) => (a.start_time > b.start_time ? 1 : -1));
-  }, [todayEvents, activeMember]);
-
-  // Próxima atividade próxima do horário atual (nas próximas horas) usando horários literais
-  const nextActivity = useMemo(() => {
-    const now = new Date();
-    const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
-
-    for (const ev of myTodayEvents) {
-      if (ev.is_all_day) continue;
-      const [h, m] = extractLiteralTime(ev.start_time).split(':').map(Number);
-      if (isNaN(h) || isNaN(m)) continue;
-      const evTotalMinutes = h * 60 + m;
-      const diffMinutes = evTotalMinutes - currentTotalMinutes;
-      if (diffMinutes >= 0 && diffMinutes <= 360) {
         return {
-          event: ev,
-          diffMinutes,
+          event_id: String(e.id),
+          title: String(e.title),
+          start_time: String(e.start_time),
+          end_time: String(e.end_time),
+          start_time_local: startLocal,
+          end_time_local: endLocal,
+          is_all_day: Boolean(e.is_all_day),
+          status: e.status || 'SCHEDULED',
+          location_name: loc?.name || null,
+          location_address: loc?.address || null,
+          responsible_id: e.responsible_id || null,
+          responsible_name: resp ? resp.nickname || resp.name : null,
+          responsible_color: resp?.color || null,
+          participants,
+          has_conflict: false
         };
+      });
+
+      for (let i = 0; i < mapped.length; i++) {
+        for (let j = i + 1; j < mapped.length; j++) {
+          const a = mapped[i];
+          const b = mapped[j];
+          if (
+            a.status !== 'CANCELLED' &&
+            b.status !== 'CANCELLED' &&
+            a.responsible_id &&
+            a.responsible_id === b.responsible_id &&
+            !a.is_all_day &&
+            !b.is_all_day
+          ) {
+            if (a.start_time_local < b.end_time_local && b.start_time_local < a.end_time_local) {
+              a.has_conflict = true;
+              b.has_conflict = true;
+            }
+          }
+        }
       }
+
+      const filtered = responsibleFilterId
+        ? mapped.filter(
+            (item) =>
+              item.responsible_id === responsibleFilterId ||
+              item.participants.some((p) => p.id === responsibleFilterId)
+          )
+        : mapped;
+
+      setItems(filtered);
+    } catch (err) {
+      console.error('Erro ao carregar resumo do dia:', err);
+      setErrorMsg('Não foi possível carregar as atividades deste dia.');
+    } finally {
+      setIsLoading(false);
     }
-    return null;
-  }, [myTodayEvents]);
+  };
 
-  // Atividades sob responsabilidade do outro cônjuge/parceiro hoje
-  const spouseInfo = useMemo(() => {
-    if (!activeMember) return null;
-    const otherAdults = members.filter(
-      (m) => m.role !== 'CHILD' && m.id !== activeMember.id
-    );
-    if (otherAdults.length === 0) return null;
+  useEffect(() => {
+    loadBriefing();
+  }, [familyId, selectedDate, responsibleFilterId, refreshTrigger]);
 
-    const spouse = otherAdults[0];
-    const spouseEvents = todayEvents.filter((e) => e.responsible_id === spouse.id);
+  const activeItems = items.filter((item) => item.status !== 'CANCELLED');
+  const unassignedCount = activeItems.filter((item) => !item.responsible_id).length;
 
-    if (spouseEvents.length === 0) return null;
+  const responsibleCounts = activeItems.reduce<Record<string, number>>((acc, item) => {
+    const name = item.responsible_name || 'Sem responsável';
+    acc[name] = (acc[name] || 0) + 1;
+    return acc;
+  }, {});
 
-    return {
-      spouse,
-      events: spouseEvents,
-    };
-  }, [activeMember, members, todayEvents]);
+  const handleCopyWhatsAppReport = () => {
+    if (activeItems.length === 0) return;
 
-  const displayName = getMemberDisplayName(activeMember) || 'Família';
+    const lines: string[] = [];
+    lines.push(`📅 *${dateLabel.title}* (${dateLabel.subtitle}):\n`);
+
+    activeItems.forEach((item) => {
+      const timeStr = item.is_all_day ? 'Dia Todo' : `${item.start_time_local} - ${item.end_time_local}`;
+      const locStr = item.location_name ? ` • 📍 ${item.location_name}` : '';
+      const partsStr =
+        item.participants.length > 0 ? ` (${item.participants.map((p) => p.name).join(', ')})` : '';
+      const respStr = item.responsible_name ? `➔ Leva: *${item.responsible_name}*` : '➔ ⚠️ *Definir responsável*';
+
+      lines.push(`⏰ *${timeStr}* — ${item.title}${partsStr} ${respStr}${locStr}`);
+    });
+
+    if (unassignedCount > 0) {
+      lines.push(`\n⚠️ *Atenção:* Há ${unassignedCount} atividade(s) sem responsável definido!`);
+    } else {
+      lines.push(`\n✅ *Tudo certo:* Todos os responsáveis definidos!`);
+    }
+
+    navigator.clipboard.writeText(lines.join('\n'));
+    setCopiedWhatsApp(true);
+    setTimeout(() => setCopiedWhatsApp(false), 3000);
+  };
+
+  const handleItemCancel = async (eventId: string) => {
+    const res = await cancelEventInstance(eventId);
+    if (res.success) {
+      setItems((prev) =>
+        prev.map((it) => (it.event_id === eventId ? { ...it, status: 'CANCELLED' } : it))
+      );
+      onEventsChanged?.();
+      onNotify?.('Atividade cancelada nesta data.', 'success');
+    }
+  };
+
+  const handleItemReactivate = async (eventId: string) => {
+    const res = await reactivateEventInstance(eventId);
+    if (res.success) {
+      setItems((prev) =>
+        prev.map((it) => (it.event_id === eventId ? { ...it, status: 'SCHEDULED' } : it))
+      );
+      onEventsChanged?.();
+      onNotify?.('Atividade reativada nesta data.', 'success');
+    }
+  };
 
   return (
-    <div className="mb-5 bg-gradient-to-br from-white via-sky-50/40 to-amber-50/30 border border-sky-200/80 rounded-3xl p-4 sm:p-5 shadow-xs relative overflow-hidden transition-all duration-300">
-      {/* Decoração sutil de fundo */}
-      <div className="absolute -top-12 -right-12 w-36 h-36 bg-amber-200/20 rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-sky-200/20 rounded-full blur-xl pointer-events-none" />
-
-      {/* Cabeçalho do Card */}
-      <div className="flex items-center justify-between gap-3 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-100/90 text-amber-800 border border-amber-200 flex items-center justify-center text-lg shadow-2xs shrink-0">
-            ☀️
+    <div className="bg-white border border-slate-200 rounded-3xl p-5 mb-6 shadow-2xs">
+      {/* Barra de Navegação de Datas */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-4">
+        {/* Título Contextual */}
+        <div>
+          <div className="flex items-center gap-2">
+            {dateLabel.isToday ? (
+              <Sun className="w-5 h-5 text-amber-500 fill-amber-500" />
+            ) : dateLabel.isTomorrow ? (
+              <Moon className="w-5 h-5 text-indigo-500 fill-indigo-500" />
+            ) : (
+              <Calendar className="w-5 h-5 text-sky-600" />
+            )}
+            <h2 className="text-base font-bold text-slate-900">{dateLabel.title}</h2>
           </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-extrabold text-slate-800 tracking-tight leading-tight">
-                {greeting}, {displayName}!
-              </h3>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-sky-100/80 text-sky-800 border border-sky-200/60 hidden sm:inline-block">
-                Briefing Matinal
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              {formattedToday}
-            </p>
-          </div>
+          <p className="text-xs text-slate-500 mt-0.5">{dateLabel.subtitle}</p>
         </div>
 
-        {/* Botão Recolher/Expandir */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {onOpenSummary && (
-            <button
-              type="button"
-              onClick={() => onOpenSummary('today')}
-              className="text-xs font-bold text-sky-700 hover:text-sky-900 px-2.5 py-1.5 rounded-xl hover:bg-sky-100/60 transition-colors hidden md:inline-flex items-center gap-1 cursor-pointer"
-              title="Abrir Resumo Completo"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-              <span>Ver Completo</span>
-            </button>
-          )}
+        {/* Controles de Navegação (Hoje, Amanhã, Setas, Picker) */}
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             type="button"
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
-            title={isCollapsed ? 'Expandir Briefing' : 'Recolher Briefing'}
-            aria-label={isCollapsed ? 'Expandir Briefing' : 'Recolher Briefing'}
+            onClick={() => setSelectedDate(todayStr)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              selectedDate === todayStr
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
           >
-            {isCollapsed ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronUp className="w-4 h-4" />
-            )}
+            Hoje
           </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedDate(shiftDateString(todayStr, 1))}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              selectedDate === shiftDateString(todayStr, 1)
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Amanhã
+          </button>
+
+          <div className="flex items-center bg-slate-100 rounded-xl p-0.5 border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setSelectedDate((prev) => shiftDateString(prev, -1))}
+              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg transition-colors"
+              title="Dia anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDate((prev) => shiftDateString(prev, 1))}
+              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg transition-colors"
+              title="Próximo dia"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <label className="relative cursor-pointer">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDate(e.target.value);
+                }
+              }}
+              className="sr-only"
+            />
+            <span
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200 flex items-center gap-1 transition-colors"
+              title="Escolher data específica"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>{dateLabel.formattedDate}</span>
+            </span>
+          </label>
         </div>
       </div>
 
-      {/* Conteúdo Expansível */}
-      {!isCollapsed && (
-        <div className="mt-4 pt-3.5 border-t border-sky-100/80 space-y-3 relative z-10 animate-in fade-in duration-200">
-          {/* Próximo Compromisso / Saída nas próximas horas */}
-          {nextActivity && (
-            <div className="bg-amber-500/10 border border-amber-300/80 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-amber-950 shadow-2xs">
-              <div className="flex items-center gap-2">
-                <span className="text-base animate-pulse">⏱️</span>
-                <span>
-                  <strong>Próxima saída:</strong> em <strong>{nextActivity.diffMinutes} minutos</strong> —{' '}
-                  <span className="font-semibold">{nextActivity.event.title}</span>
-                  {nextActivity.event.location?.name && (
-                    <span className="text-amber-900/90 font-medium ml-1.5 inline-flex items-center text-[11px] bg-amber-100/80 px-2 py-0.5 rounded-md">
-                      • 📍 {nextActivity.event.location.name}
-                    </span>
-                  )}
-                  .
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => onCardClick?.(nextActivity.event)}
-                className="font-bold text-amber-900 underline hover:text-amber-950 shrink-0 cursor-pointer text-[11px]"
-              >
-                Ver detalhes
-              </button>
-            </div>
+      {/* Mini-Balanço / Métricas Rápidas do Dia */}
+      <div className="flex items-center justify-between flex-wrap gap-2 text-xs text-slate-500 mb-4 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span>
+            📋 <strong>{activeItems.length}</strong> atividade(s)
+          </span>
+          {Object.entries(responsibleCounts).map(([name, count]) => (
+            <span key={name} className="border-l border-slate-200 pl-3">
+              👤 {name}: <strong>{count}</strong>
+            </span>
+          ))}
+          {unassignedCount > 0 && (
+            <span className="border-l border-slate-200 pl-3 text-amber-800 font-bold bg-amber-100/60 px-2 py-0.5 rounded-md">
+              ⚠️ {unassignedCount} sem responsável
+            </span>
           )}
+        </div>
 
-          {/* Relatório de Atividades do Membro Ativo */}
-          {myTodayEvents.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-700">
-                Hoje você tem <strong>{myTodayEvents.length} atividade(s)</strong> sob sua responsabilidade:
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {myTodayEvents.map((ev) => {
-                  const startTimeStr = ev.is_all_day
-                    ? 'Dia Inteiro'
-                    : extractLiteralTime(ev.start_time);
-                  const participantNames =
-                    ev.participants && ev.participants.length > 0
-                      ? ev.participants.map((p) => getMemberDisplayName(p)).join(', ')
-                      : null;
+        {activeItems.length > 0 && (
+          <button
+            type="button"
+            onClick={handleCopyWhatsAppReport}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:text-sky-800 transition-colors ml-auto"
+          >
+            {copiedWhatsApp ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
+            <span>{copiedWhatsApp ? 'Copiado para o WhatsApp!' : 'Copiar para WhatsApp'}</span>
+          </button>
+        )}
+      </div>
 
-                  return (
-                    <div
-                      key={ev.id}
-                      onClick={() => onCardClick?.(ev)}
-                      className="bg-white/90 hover:bg-white border border-sky-100 hover:border-sky-300 rounded-2xl p-2.5 transition-all shadow-2xs hover:shadow-xs cursor-pointer flex flex-col justify-between gap-1.5 group"
-                    >
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span className="text-[11px] font-bold text-sky-700 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-sky-600" />
-                          {startTimeStr}
+      {/* Estados: Loading, Error e Lista de Atividades */}
+      {isLoading ? (
+        <div className="space-y-2.5 animate-pulse">
+          <div className="h-14 bg-slate-100 rounded-2xl" />
+          <div className="h-14 bg-slate-100 rounded-2xl" />
+        </div>
+      ) : errorMsg ? (
+        <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-2xl text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+          {errorMsg}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="py-8 text-center text-xs text-slate-400 font-medium">
+          Nenhum compromisso agendado para esta data. Família livre! 🎉
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {items.map((item) => {
+            const isCancelled = item.status === 'CANCELLED';
+
+            return (
+              <div
+                key={item.event_id}
+                className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  isCancelled
+                    ? 'opacity-65 bg-slate-50/90 border-dashed border-slate-300'
+                    : item.has_conflict
+                    ? 'border-red-300 bg-red-50/40 ring-1 ring-red-400'
+                    : !item.responsible_id
+                    ? 'border-amber-300 bg-amber-50/30'
+                    : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className={`font-bold border px-2.5 py-1 rounded-xl text-xs shrink-0 ${
+                      isCancelled
+                        ? 'bg-slate-200 text-slate-500 border-slate-300 line-through'
+                        : 'bg-sky-50 text-sky-700 border-sky-100'
+                    }`}
+                  >
+                    {item.is_all_day ? 'Dia Todo' : `${item.start_time_local} - ${item.end_time_local}`}
+                  </span>
+
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`font-bold text-sm ${
+                          isCancelled ? 'line-through text-slate-400' : 'text-slate-900'
+                        }`}
+                      >
+                        {item.title}
+                      </span>
+
+                      {item.location_name && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                          {item.location_name}
                         </span>
-                        {ev.location?.name && (
-                          <span className="text-[10px] text-slate-500 flex items-center gap-0.5 truncate max-w-[110px]" title={ev.location.name}>
-                            <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                            <span className="truncate">{ev.location.name}</span>
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="text-xs font-bold text-slate-800 line-clamp-1 group-hover:text-sky-700 transition-colors flex items-center flex-wrap gap-1">
-                        <span>{ev.title}</span>
-                        {ev.location?.name && (
-                          <span className="text-[10px] font-normal text-slate-400">
-                            • 📍 {ev.location.name}
-                          </span>
-                        )}
-                      </h4>
-                      {participantNames && (
-                        <p className="text-[10px] text-slate-500 flex items-center gap-1 truncate">
-                          <Users className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                          <span className="truncate">{participantNames}</span>
-                        </p>
+                      )}
+
+                      {isCancelled && (
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-200/80 px-1.5 py-0.5 rounded">
+                          Cancelado nesta data
+                        </span>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3 flex items-center gap-2.5 text-xs text-emerald-900 shadow-2xs">
-              <span className="text-base">🎉</span>
-              <span>
-                <strong>Nenhuma atividade sob sua responsabilidade hoje!</strong> Aproveite o dia livre.
-              </span>
-            </div>
-          )}
 
-          {/* Visão Compartilhada da Casa (Paz de Espírito com o Cônjuge) */}
-          {spouseInfo && spouseInfo.events.length > 0 && (
-            <div className="bg-sky-50/80 border border-sky-100 rounded-2xl p-2.5 px-3 flex items-center justify-between flex-wrap gap-2 text-xs text-sky-950">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">ℹ️</span>
-                <span>
-                  <strong>A {getMemberDisplayName(spouseInfo.spouse)} cuida de:</strong>{' '}
-                  {spouseInfo.events
-                    .map((e) => {
-                      const t = e.is_all_day
-                        ? 'Dia Inteiro'
-                        : extractLiteralTime(e.start_time);
-                      const locStr = e.location?.name ? ` • 📍 ${e.location.name}` : '';
-                      return `${e.title}${locStr} às ${t}`;
-                    })
-                    .join(' • ')}
-                  .
-                </span>
+                    {item.participants.length > 0 && !isCancelled && (
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <span className="text-[11px] text-slate-400 font-medium">Participante(s):</span>
+                        {item.participants.map((p) => (
+                          <span
+                            key={p.id}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold text-white shadow-2xs"
+                            style={{ backgroundColor: p.color }}
+                          >
+                            {p.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-xs flex items-center sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="text-slate-500">Responsável:</span>
+                    {item.responsible_name ? (
+                      <strong className="text-slate-800">{item.responsible_name}</strong>
+                    ) : (
+                      <span className="text-amber-800 bg-amber-100 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                        Definir
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Ações Rápidas no Card */}
+                  <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+                    {!isCancelled ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            downloadNativeAlarmIcs({
+                              id: item.event_id,
+                              family_id: familyId || '',
+                              title: item.title,
+                              start_time: item.start_time,
+                              end_time: item.end_time,
+                              is_all_day: item.is_all_day,
+                              status: item.status,
+                              location: item.location_name ? { id: 'loc', family_id: familyId || '', name: item.location_name } : null,
+                              responsible: item.responsible_name ? { id: 'resp', family_id: familyId || '', name: item.responsible_name, role: 'ADMIN', color: item.responsible_color || '#3B82F6' } : null
+                            })
+                          }
+                          title="Alarme no celular (.ics)"
+                          className="p-1 text-slate-400 hover:text-sky-600 rounded-md transition-colors"
+                        >
+                          <BellRing className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleItemCancel(item.event_id)}
+                          title="Cancelar nesta data"
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition-colors"
+                        >
+                          <CalendarX className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleItemReactivate(item.event_id)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-md transition-colors"
+                      >
+                        <Undo2 className="w-3 h-3" />
+                        Reativar
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-              <span className="text-[10px] font-bold text-sky-700 bg-white/80 px-2 py-0.5 rounded-full border border-sky-200">
-                Parceria Ativa
-              </span>
-            </div>
-          )}
+            );
+          })}
         </div>
       )}
     </div>

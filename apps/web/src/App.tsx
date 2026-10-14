@@ -1650,6 +1650,8 @@ export const App: React.FC = () => {
           currentMember={currentMember}
           onCardClick={handleCardClick}
           onOpenSummary={handleOpenSummary}
+          onEventsChanged={loadData}
+          onNotify={showToast}
         />
 
         {/* Banner de Atividades Sem Responsável */}
