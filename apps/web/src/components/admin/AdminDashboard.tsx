@@ -2293,7 +2293,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-sm font-black text-slate-900">
-                          Credenciais de IA (Google Gemini 1.5 Flash)
+                          Credenciais de IA (Google Gemini 2.0 / 2.5 Flash)
                         </h3>
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
                           <Lock className="w-3 h-3 text-emerald-700" /> Criptografado AES-256 (pgcrypto)

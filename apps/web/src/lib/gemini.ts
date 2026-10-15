@@ -58,8 +58,6 @@ export async function extractRoutineWithGemini(
     throw new Error('Chave da API do Google Gemini não configurada. Configure no Painel Super-Admin ou insira sua chave do Google AI Studio.');
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
   const membersContext = members
     .map((m) => `- Nome: "${m.name}" (Apelido: "${m.nickname || m.name}"), Papel: ${m.role}`)
     .join('\n');
@@ -108,20 +106,50 @@ Regras estritas:
     }
   };
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+  // Modelos suportados em ordem de preferência e modernidade (evita erros 404 de descontinuação)
+  const candidateModels = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-flash'
+  ];
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData?.error?.message || `Erro na API do Gemini (${response.status}: ${response.statusText})`
-    );
+  let result: any = null;
+  let lastErrorMessage = '';
+
+  for (const model of candidateModels) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        result = await response.json();
+        break; // Modelo respondeu com sucesso!
+      }
+
+      const errorData = await response.json().catch(() => ({}));
+      lastErrorMessage = errorData?.error?.message || `Erro na API do Gemini (${response.status}: ${response.statusText})`;
+
+      // Se não for erro 404 (modelo inexistente nesta versão), aborta para não mascarar erro de auth/cota
+      if (response.status !== 404) {
+        throw new Error(lastErrorMessage);
+      }
+    } catch (err: any) {
+      if (err.message && !err.message.includes('not found') && !err.message.includes('404')) {
+        throw err;
+      }
+      lastErrorMessage = err.message;
+    }
   }
 
-  const result = await response.json();
+  if (!result) {
+    throw new Error(lastErrorMessage || 'Nenhum dos modelos disponíveis do Gemini respondeu à requisição.');
+  }
   const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
   const cleanJson = rawText.replace(/```json\n?|```/g, '').trim();
 

@@ -171,7 +171,7 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">Captura Inteligente com IA</h2>
-              <p className="text-[11px] text-slate-500 font-medium">Google Gemini 1.5 Flash Multimodal</p>
+              <p className="text-[11px] text-slate-500 font-medium">Google Gemini 2.0 / 2.5 Flash Multimodal</p>
             </div>
           </div>
 
