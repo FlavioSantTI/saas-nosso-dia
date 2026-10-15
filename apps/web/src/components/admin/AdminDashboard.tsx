@@ -31,6 +31,11 @@ import {
   KeyRound,
   Mail,
   Send,
+  Lock,
+  Check,
+  ExternalLink,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -144,6 +149,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [settingsToast, setSettingsToast] = useState<string | null>(null);
   const [planSavingId, setPlanSavingId] = useState<string | null>(null);
   const [planSaveToast, setPlanSaveToast] = useState<{ [planId: string]: string }>({});
+
+  // Gestão da Chave de API de IA (Google Gemini 1.5 Flash - Criptografia AES-256)
+  const [geminiKeyInput, setGeminiKeyInput] = useState('');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [isSavingAiKey, setIsSavingAiKey] = useState(false);
+  const [aiKeyFeedback, setAiKeyFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [aiPlatformSettings, setAiPlatformSettings] = useState<{
+    key: string;
+    key_fingerprint: string | null;
+    description: string | null;
+    updated_at: string;
+  }[]>([]);
 
   // Dados de Tenants e Cobrança
   const [tenants, setTenants] = useState<TenantBillingInfo[]>([]);
@@ -408,9 +425,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ]);
       }
 
-      // 2.5 Carrega Usuários / Membros de todas as Famílias
+      // 2.5 Carrega Usuários / Membros de todas as Famílias e Chave de IA
       await loadFamilyMembers();
       await loadAdminUsers();
+      await loadAiPlatformSettings();
     } catch (err) {
       console.error('[Admin] Erro ao carregar dados:', err);
     } finally {
@@ -587,6 +605,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const cost = totalAiCreditsUsed * 0.02;
     return cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }, [totalAiCreditsUsed]);
+
+  const geminiSetting = useMemo(() => {
+    return aiPlatformSettings.find((s) => s.key === 'gemini_api_key');
+  }, [aiPlatformSettings]);
+
+  // -------------------------------------------------------------
+  // Handlers para Credenciais de IA (Google Gemini 1.5 Flash)
+  // -------------------------------------------------------------
+  const loadAiPlatformSettings = async () => {
+    try {
+      const { data, error } = await supabase.rpc('admin_get_platform_settings');
+      if (!error && Array.isArray(data)) {
+        setAiPlatformSettings(data);
+      }
+    } catch (err) {
+      console.error('[Admin] Erro ao carregar credenciais de IA:', err);
+    }
+  };
+
+  const handleSaveGeminiKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!geminiKeyInput.trim()) {
+      setAiKeyFeedback({ type: 'error', message: 'Informe a chave de API do Google Gemini.' });
+      return;
+    }
+
+    try {
+      setIsSavingAiKey(true);
+      setAiKeyFeedback(null);
+
+      const { data, error } = await supabase.rpc('admin_set_platform_setting', {
+        p_key: 'gemini_api_key',
+        p_value: geminiKeyInput.trim(),
+        p_description: 'Google Gemini 1.5 Flash (Criptografia AES-256)'
+      });
+
+      if (error) throw error;
+
+      setAiKeyFeedback({
+        type: 'success',
+        message: data?.message || 'Chave do Google Gemini criptografada com AES-256 e gravada com sucesso!'
+      });
+
+      setGeminiKeyInput('');
+      await loadAiPlatformSettings();
+      setTimeout(() => setAiKeyFeedback(null), 5000);
+    } catch (err: any) {
+      setAiKeyFeedback({
+        type: 'error',
+        message: err?.message || 'Falha ao salvar chave criptografada no banco.'
+      });
+    } finally {
+      setIsSavingAiKey(false);
+    }
+  };
 
   // -------------------------------------------------------------
   // Handlers para Custos Globais e Regras de IA por Plano
@@ -2206,6 +2279,137 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {platformSettings.ai_enabled ? 'Assistente de IA Ativo' : 'Kill-Switch Ativo (IA Pausada)'}
                   </span>
                 </div>
+              </div>
+
+              {/* ========================================================== */}
+              {/* SEÇÃO 0: CREDENCIAIS E CHAVE DE API DA IA (CRIPTOGRAFADA)  */}
+              {/* ========================================================== */}
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-2xl bg-amber-50 text-[#EA580C] border border-amber-200 shrink-0 mt-0.5">
+                      <Cpu className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-black text-slate-900">
+                          Credenciais de IA (Google Gemini 1.5 Flash)
+                        </h3>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                          <Lock className="w-3 h-3 text-emerald-700" /> Criptografado AES-256 (pgcrypto)
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                        A chave de API mestra da plataforma é criptografada em repouso no banco de dados. Os usuários e famílias autenticados usam o assistente multimodal sem nunca visualizar nem manipular a chave.
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-bold hover:underline shrink-0 bg-indigo-50/60 border border-indigo-100 px-3 py-1.5 rounded-xl transition-colors"
+                  >
+                    <span>Google AI Studio</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+
+                {/* Status da Chave e Formulário */}
+                <form onSubmit={handleSaveGeminiKey} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-800">
+                        Chave de API Ativa na Plataforma:
+                      </span>
+                      {geminiSetting ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-300 px-2.5 py-0.5 rounded-lg">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Ativa:</span>
+                          <code className="font-mono font-black text-emerald-900 bg-white/70 px-1.5 py-0.5 rounded">
+                            {geminiSetting.key_fingerprint}
+                          </code>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2.5 py-0.5 rounded-lg">
+                          Chave não configurada no banco
+                        </span>
+                      )}
+                    </div>
+
+                    {geminiSetting && (
+                      <span className="text-[11px] text-slate-400">
+                        Atualizado em: {new Date(geminiSetting.updated_at).toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showGeminiKey ? 'text' : 'password'}
+                        value={geminiKeyInput}
+                        onChange={(e) => setGeminiKeyInput(e.target.value)}
+                        placeholder={
+                          geminiSetting
+                            ? 'Digite nova chave AIzaSy... para substituir e criptografar com AES-256'
+                            : 'Cole sua chave AIzaSy...'
+                        }
+                        className="w-full pl-3.5 pr-10 py-2.5 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-slate-800 placeholder:text-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGeminiKey(!showGeminiKey)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        title={showGeminiKey ? 'Ocultar chave' : 'Mostrar chave'}
+                      >
+                        {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSavingAiKey}
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                    >
+                      {isSavingAiKey ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Criptografando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Salvar Chave Criptografada</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {aiKeyFeedback && (
+                    <div
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-2 ${
+                        aiKeyFeedback.type === 'success'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-red-50 text-red-800 border-red-200'
+                      }`}
+                    >
+                      {aiKeyFeedback.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                      )}
+                      <span>{aiKeyFeedback.message}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-slate-200/70 text-[11px] text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <span>
+                      🔒 <strong>Proteção LGPD & Segurança:</strong> A chave em texto puro nunca é salva nem exposta em logs. A descriptografia ocorre unicamente em RAM no momento da chamada da RPC <code className="text-indigo-600 font-mono text-[10px]">get_active_ai_key</code>.
+                    </span>
+                  </div>
+                </form>
               </div>
 
               {/* ========================================================== */}
