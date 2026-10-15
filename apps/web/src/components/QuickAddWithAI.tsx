@@ -3,8 +3,6 @@ import { FamilyMember } from '../types';
 import {
   extractRoutineWithGemini,
   getGeminiApiKey,
-  getLocalGeminiApiKey,
-  setGeminiApiKey,
   ExtractedRoutineData
 } from '../lib/gemini';
 import {
@@ -13,7 +11,6 @@ import {
   MicOff,
   Camera,
   X,
-  Key,
   AlertCircle,
   Loader2,
   Check
@@ -47,11 +44,6 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   // Ditado por Voz (Web Speech API)
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
-
-  // Configuração da Chave Gemini
-  const [showKeyConfig, setShowKeyConfig] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(() => getLocalGeminiApiKey());
-  const [keySaved, setKeySaved] = useState(false);
 
   // Prévia Estruturada
   const [parsedPreview, setParsedPreview] = useState<ExtractedRoutineData | null>(null);
@@ -141,7 +133,9 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
 
     const activeKey = await getGeminiApiKey();
     if (!activeKey) {
-      setShowKeyConfig(true);
+      setErrorMessage(
+        'O assistente de IA está temporariamente indisponível. Solicite a ativação ao administrador da plataforma.'
+      );
       return;
     }
 
@@ -167,15 +161,6 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
     }
   };
 
-  const handleSaveApiKey = () => {
-    setGeminiApiKey(apiKeyInput);
-    setKeySaved(true);
-    setTimeout(() => {
-      setKeySaved(false);
-      setShowKeyConfig(false);
-    }, 1200);
-  };
-
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
@@ -190,57 +175,14 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setShowKeyConfig((prev) => !prev)}
-              title="Configurar Chave do Google AI Studio"
-              className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <Key className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 font-bold text-lg p-1.5 cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 font-bold text-lg p-1.5 cursor-pointer"
+          >
+            ✕
+          </button>
         </div>
-
-        {showKeyConfig && (
-          <div className="mb-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-2">
-            <div className="flex items-center justify-between font-bold text-slate-800">
-              <span>Chave da API do Google AI Studio:</span>
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="text-sky-600 hover:underline text-[11px]"
-              >
-                Obter chave grátis ↗
-              </a>
-            </div>
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder="Cole sua chave AIzaSy..."
-              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono text-xs focus:ring-2 focus:ring-sky-500 focus:outline-hidden"
-            />
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleSaveApiKey}
-                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-              >
-                {keySaved ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : null}
-                {keySaved ? 'Chave salva!' : 'Salvar chave'}
-              </button>
-            </div>
-          </div>
-        )}
 
         <p className="text-xs text-slate-500 mb-3 leading-relaxed">
           Cole a mensagem do WhatsApp, fale pelo microfone ou anexe a foto do bilhete escolar. A IA identificará o horário, o filho e o responsável.

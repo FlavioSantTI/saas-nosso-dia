@@ -1,23 +1,15 @@
 import { FamilyMember } from '../types';
 import { supabase } from './supabase';
 
-export function getLocalGeminiApiKey(): string {
-  return (
-    import.meta.env.VITE_GEMINI_API_KEY ||
-    localStorage.getItem('nosso_dia_gemini_key') ||
-    ''
-  );
-}
-
-export function setGeminiApiKey(key: string): void {
-  localStorage.setItem('nosso_dia_gemini_key', key.trim());
+export function getFallbackGeminiApiKey(): string {
+  return import.meta.env.VITE_GEMINI_API_KEY || '';
 }
 
 /**
  * Obtém a chave ativa da API do Gemini:
- * 1. Primeiro tenta obter a chave descriptografada em memória (RAM) via RPC do Supabase
+ * 1. Obtém a chave corporativa descriptografada em memória (RAM) via RPC do Supabase
  *    armazenada com OpenPGP AES-256 na tabela platform_settings.
- * 2. Em caso de fallback (offline ou sem RPC), utiliza a variável de ambiente ou chave local.
+ * 2. Em caso de fallback (modo dev local), utiliza a variável de ambiente VITE_GEMINI_API_KEY.
  */
 export async function getGeminiApiKey(): Promise<string> {
   try {
@@ -29,7 +21,7 @@ export async function getGeminiApiKey(): Promise<string> {
     // Silencioso se offline ou não autenticado
   }
 
-  return getLocalGeminiApiKey();
+  return getFallbackGeminiApiKey();
 }
 
 export interface ExtractedRoutineData {
