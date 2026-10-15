@@ -1,5 +1,6 @@
 import { FamilyMember } from '../types';
 import { supabase } from './supabase';
+import { getLocalDateString } from './dateUtils';
 
 export function getFallbackGeminiApiKey(): string {
   return import.meta.env.VITE_GEMINI_API_KEY || '';
@@ -67,8 +68,23 @@ export async function extractRoutineWithGemini(
 
   const now = new Date();
   const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
-  const currentDayName = dayNames[now.getDay()];
-  const currentDateStr = now.toISOString().split('T')[0]; // ex: 2026-10-14
+  
+  const todayStr = getLocalDateString(now);
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = getLocalDateString(tomorrow);
+
+  // Tabela explícita dos próximos 7 dias no horário local (evita qualquer confusão de timezone com UTC às 21h/22h)
+  const upcomingSchedule: string[] = [];
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() + i);
+    const dateStr = getLocalDateString(d);
+    const name = dayNames[d.getDay()];
+    const label = i === 0 ? `HOJE (${name})` : i === 1 ? `AMANHÃ (${name})` : name;
+    upcomingSchedule.push(`- ${label}: ${dateStr}`);
+  }
 
   const membersContext = members
     .map((m) => `- Nome: "${m.name}" (Apelido: "${m.nickname || m.name}"), Papel: ${m.role}`)
@@ -77,11 +93,13 @@ export async function extractRoutineWithGemini(
   const systemInstruction = `Você é o assistente inteligente do aplicativo familiar "Nosso Dia".
 Sua tarefa é analisar o texto (mensagem de WhatsApp, áudio ou bilhete escolar) e extrair os dados estruturados do compromisso familiar.
 
-CONTEXTO TEMPORAL DE HOJE:
-- Hoje é: ${currentDayName}, data: ${currentDateStr}.
-- Se o usuário disser "hoje", use a data ${currentDateStr}.
-- Se o usuário disser "amanhã", calcule exatamente o dia seguinte (+1 dia).
-- Se o usuário disser um dia da semana específico (ex: "nesta sexta", "sábado que vem"), calcule a data YYYY-MM-DD correspondente mais próxima.
+TABELA OFICIAL DE DATAS DO USUÁRIO (Fuso Horário Local: NUNCA use UTC):
+${upcomingSchedule.join('\n')}
+
+REGRAS TEMPORAIS ESTRITAS (MUITO IMPORTANTE):
+- Se o usuário disser "hoje", a data retornada em "date_str" DEVE SER OBRIGATORIAMENTE "${todayStr}".
+- Se o usuário disser "amanhã", a data retornada em "date_str" DEVE SER OBRIGATORIAMENTE "${tomorrowStr}". (Exemplo: se hoje é dia ${todayStr.split('-')[2]}, amanhã é dia ${tomorrowStr.split('-')[2]}). NUNCA pule dias!
+- Se o usuário disser um dia da semana (ex: "nesta sexta", "sábado"), use a data exata YYYY-MM-DD indicada na tabela acima. NUNCA invente outra data.
 
 Membros cadastrados na família:
 ${membersContext}
@@ -260,7 +278,7 @@ Formato OBRIGATÓRIO de saída (JSON puro):
   return {
     title: (parsed.title || 'Atividade').trim().slice(0, 100),
     type: activityType,
-    date_str: parsed.date_str || (activityType === 'SINGLE' ? currentDateStr : null),
+    date_str: parsed.date_str || (activityType === 'SINGLE' ? todayStr : null),
     days: normalizedDays,
     startTime: timeFormatted,
     time: timeFormatted,

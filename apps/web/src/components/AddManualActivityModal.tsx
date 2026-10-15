@@ -8,6 +8,7 @@ import {
   sanitizeTitle,
   validateTitle,
 } from '../lib/sanitize';
+import { getLocalDateString } from '../lib/dateUtils';
 
 interface AddManualActivityModalProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'RECURRING' | 'SINGLE'>('RECURRING');
-  const [singleDate, setSingleDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [singleDate, setSingleDate] = useState(() => getLocalDateString());
   const [days, setDays] = useState<string[]>([]);
   const [isAllDay, setIsAllDay] = useState(false);
   const [startTime, setStartTime] = useState('');
@@ -49,7 +50,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
         if (initialData.date_str) {
           setSingleDate(initialData.date_str);
         } else {
-          setSingleDate(new Date().toISOString().split('T')[0]);
+          setSingleDate(getLocalDateString());
         }
         setDays(Array.isArray(initialData.days) ? initialData.days : []);
         setIsAllDay(Boolean(initialData.is_all_day));
@@ -82,7 +83,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
         // Reset para abertura manual padrão
         setTitle('');
         setType('RECURRING');
-        setSingleDate(new Date().toISOString().split('T')[0]);
+        setSingleDate(getLocalDateString());
         setDays([]);
         setIsAllDay(false);
         setStartTime('');
@@ -175,7 +176,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
       // Reset form
       setTitle('');
       setType('RECURRING');
-      setSingleDate(new Date().toISOString().split('T')[0]);
+      setSingleDate(getLocalDateString());
       setDays([]);
       setIsAllDay(false);
       setStartTime('');
@@ -289,10 +290,10 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setSingleDate(new Date().toISOString().split('T')[0]);
+                      setSingleDate(getLocalDateString());
                     }}
                     className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg cursor-pointer transition-colors ${
-                      singleDate === new Date().toISOString().split('T')[0]
+                      singleDate === getLocalDateString()
                         ? 'bg-sky-100 text-sky-800 border border-sky-300'
                         : 'text-slate-500 hover:bg-slate-100 border border-transparent'
                     }`}
@@ -304,7 +305,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
                     onClick={() => {
                       const d = new Date();
                       d.setDate(d.getDate() + 1);
-                      setSingleDate(d.toISOString().split('T')[0]);
+                      setSingleDate(getLocalDateString(d));
                     }}
                     className="text-[11px] font-bold text-slate-500 hover:bg-slate-100 px-2.5 py-0.5 rounded-lg cursor-pointer transition-colors border border-transparent"
                   >
