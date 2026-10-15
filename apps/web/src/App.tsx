@@ -13,6 +13,7 @@ import { FamilyManageModal } from './components/FamilyManageModal';
 import { AuthModal } from './components/AuthModal';
 import { SummaryModal } from './components/SummaryModal';
 import { DailyBriefingCard } from './components/DailyBriefingCard';
+import { CalendarSearchModal } from './components/CalendarSearchModal';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import { Onboarding } from './components/Onboarding';
 import { supabase } from './lib/supabase';
@@ -379,6 +380,7 @@ export const App: React.FC = () => {
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
   const [manualAddInitialData, setManualAddInitialData] = useState<any>(null);
   const [isManageFamilyOpen, setIsManageFamilyOpen] = useState(false);
@@ -1665,6 +1667,7 @@ export const App: React.FC = () => {
         family={family}
         onOpenManageFamily={() => setIsManageFamilyOpen(true)}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+        onOpenSearch={() => setIsSearchOpen(true)}
         onOpenNewActivity={() => {
           setManualAddInitialData(null);
           setIsManualAddOpen(true);
@@ -1694,16 +1697,18 @@ export const App: React.FC = () => {
         />
 
         {/* Relatório Diário Matinal ("Briefing do Dia") */}
-        <DailyBriefingCard
-          familyId={family?.id}
-          events={events}
-          members={members}
-          currentMember={currentMember}
-          onCardClick={handleCardClick}
-          onOpenSummary={handleOpenSummary}
-          onEventsChanged={loadData}
-          onNotify={showToast}
-        />
+        <div id="daily-briefing-section">
+          <DailyBriefingCard
+            familyId={family?.id}
+            events={events}
+            members={members}
+            currentMember={currentMember}
+            onCardClick={handleCardClick}
+            onOpenSummary={handleOpenSummary}
+            onEventsChanged={loadData}
+            onNotify={showToast}
+          />
+        </div>
 
         {/* Banner de Atividades Sem Responsável */}
         {unassignedCount > 0 && (
@@ -1903,6 +1908,21 @@ export const App: React.FC = () => {
         onOpenUnassignedModal={() => {
           setIsSummaryModalOpen(false);
           setIsUnassignedModalOpen(true);
+        }}
+      />
+
+      {/* Modal: Busca Rápida de Atividades no Calendário */}
+      <CalendarSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        familyId={family.id}
+        onSelectDate={(dateStr) => {
+          const parsed = parseSafeLocalDate(dateStr);
+          setCurrentDate(parsed);
+          const element = document.getElementById('daily-briefing-section');
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth' });
+          }
         }}
       />
 

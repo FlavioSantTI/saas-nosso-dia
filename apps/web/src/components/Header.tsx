@@ -18,7 +18,8 @@ import {
   Zap,
   X,
   Calendar,
-  Clock
+  Clock,
+  Search
 } from 'lucide-react';
 import { APP_VERSION } from '../constants/version';
 
@@ -28,6 +29,7 @@ interface HeaderProps {
   onOpenNewActivity: () => void;
   onOpenManageFamily: () => void;
   onOpenSummary: (initialTab?: 'today' | 'week') => void;
+  onOpenSearch?: () => void;
   currentUser?: any | null;
   currentMember?: FamilyMember | null;
   isSuperAdmin?: boolean;
@@ -45,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewActivity,
   onOpenManageFamily,
   onOpenSummary,
+  onOpenSearch,
   currentUser,
   currentMember,
   isSuperAdmin = false,
@@ -176,6 +179,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Lado Direito: VERSÃO DESKTOP (sm: e superior) */}
         <div className="hidden sm:flex items-center space-x-2 sm:space-x-2.5">
+          {/* Botão Buscar Atividades */}
+          {onOpenSearch && (
+            <button
+              type="button"
+              onClick={onOpenSearch}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 transition-all shadow-2xs cursor-pointer group"
+              title="Buscar atividades e compromissos (Ctrl+K)"
+            >
+              <Search className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-600 transition-colors" />
+              <span className="hidden md:inline">Buscar</span>
+            </button>
+          )}
+
           {/* Botão Resumo & Balanço */}
           <button
             onClick={() => onOpenSummary('today')}
@@ -377,6 +393,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Lado Direito: VERSÃO MOBILE (< 640px / smartphone) */}
         <div className="flex sm:hidden items-center space-x-1.5">
+          {/* Botão Buscar Atividades Mobile */}
+          {onOpenSearch && (
+            <button
+              type="button"
+              onClick={onOpenSearch}
+              className="p-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white text-slate-700 transition-all shadow-2xs cursor-pointer flex items-center justify-center"
+              title="Buscar Atividades"
+              aria-label="Buscar Atividades"
+            >
+              <Search className="w-4 h-4 text-slate-600" />
+            </button>
+          )}
+
           {/* Botão Prioritário Compacto: 🤖 IA */}
           <button
             onClick={onOpenQuickAdd}
@@ -442,6 +471,20 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
 
                 <div className="space-y-0.5">
+                  {onOpenSearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onOpenSearch();
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-800 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <Search className="w-4 h-4 text-sky-600" />
+                      <span>Buscar Atividades</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
