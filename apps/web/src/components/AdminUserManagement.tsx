@@ -51,7 +51,7 @@ interface PlatformSettingRow {
 interface PlanCatalogOption {
   id: string;
   name: string;
-  price: number;
+  price_cents?: number;
 }
 
 interface AdminUserManagementProps {
@@ -156,19 +156,24 @@ export const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
 
     // Carrega Planos Ativos
     try {
-      const { data, error } = await supabase.from('plans').select('id, name, price').eq('is_active', true);
+      const { data, error } = await supabase
+        .from('plans')
+        .select('id, name, price_cents')
+        .eq('is_active', true)
+        .order('price_cents', { ascending: false });
+
       if (!error && Array.isArray(data) && data.length > 0) {
         setPlanCatalog(data);
         if (!selectedPlanId) {
           setSelectedPlanId(data[0].id);
         }
       } else {
-        // Fallback de catálogo se tabela vazia
+        // Fallback com UUIDs válidos oficiais do banco
         const defaultPlans: PlanCatalogOption[] = [
-          { id: 'plan-pro-ia-anual', name: 'Família Pro IA Anual', price: 299 },
-          { id: 'plan-pro-ia', name: 'Família Pro IA Mensal', price: 29.9 },
-          { id: 'plan-essencial', name: 'Família Essencial', price: 19.9 },
-          { id: 'plan-trial', name: 'Degustação (Trial 14 dias)', price: 0 }
+          { id: 'd4444444-4444-4444-4444-444444444444', name: 'Família Pro IA Anual' },
+          { id: 'd3333333-3333-3333-3333-333333333333', name: 'Família Pro IA Mensal' },
+          { id: 'd2222222-2222-2222-2222-222222222222', name: 'Família Essencial' },
+          { id: 'd1111111-1111-1111-1111-111111111111', name: 'Degustação (Trial 14 dias)' }
         ];
         setPlanCatalog(defaultPlans);
         if (!selectedPlanId) setSelectedPlanId(defaultPlans[0].id);
@@ -221,11 +226,26 @@ export const AdminUserManagement: React.FC<AdminUserManagementProps> = ({
       setIsUpdatingSubscription(true);
       setSubscriptionFeedback(null);
 
+      // Normaliza para UUID válido oficial do banco
+      let validPlanId = selectedPlanId;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(validPlanId);
+      if (!isUuid) {
+        if (validPlanId.includes('anual')) {
+          validPlanId = 'd4444444-4444-4444-4444-444444444444';
+        } else if (validPlanId.includes('pro')) {
+          validPlanId = 'd3333333-3333-3333-3333-333333333333';
+        } else if (validPlanId.includes('essencial')) {
+          validPlanId = 'd2222222-2222-2222-2222-222222222222';
+        } else {
+          validPlanId = 'd1111111-1111-1111-1111-111111111111';
+        }
+      }
+
       const expiresParam = customExpiresDate ? `${customExpiresDate}T23:59:59Z` : null;
 
       const { data, error } = await supabase.rpc('admin_set_family_subscription', {
         p_family_id: selectedFamilyForPlan,
-        p_plan_id: selectedPlanId,
+        p_plan_id: validPlanId,
         p_status: 'ACTIVE',
         p_expires_at: expiresParam,
         p_duration_days: expiresParam ? null : durationDays
