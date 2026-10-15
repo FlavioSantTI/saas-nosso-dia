@@ -179,16 +179,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Lado Direito: VERSÃO DESKTOP (sm: e superior) */}
         <div className="hidden sm:flex items-center space-x-2 sm:space-x-2.5">
-          {/* Botão Resumo & Balanço */}
-          <button
-            onClick={() => onOpenSummary('today')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 transition-all shadow-2xs cursor-pointer group"
-            title="Painel de Resumo (Meu Dia e Balanço da Semana)"
-          >
-            <BarChart3 className="w-3.5 h-3.5 text-sky-600 transition-transform group-hover:scale-110" />
-            <span className="hidden md:inline">Resumo &</span> Balanço
-          </button>
-
           {/* Botão Gerenciar Família */}
           <button
             onClick={onOpenManageFamily}
