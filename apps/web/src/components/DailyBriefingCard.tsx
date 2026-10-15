@@ -18,6 +18,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   MapPin,
   User,
   AlertCircle,
@@ -54,6 +56,24 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nosso_dia_briefing_collapsed');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('nosso_dia_briefing_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const dateLabel = getFriendlyDateLabel(selectedDate, todayStr);
 
@@ -225,12 +245,16 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-5 mb-6 shadow-2xs">
+    <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 mb-6 shadow-2xs transition-all duration-300">
       {/* Barra de Navegação de Datas */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-4">
-        {/* Título Contextual */}
-        <div>
-          <div className="flex items-center gap-2">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isCollapsed ? '' : 'border-b border-slate-100 pb-4 mb-4'}`}>
+        {/* Título Contextual Clicável para Recolher/Expandir */}
+        <div
+          onClick={toggleCollapse}
+          className="flex items-center gap-2.5 cursor-pointer group select-none"
+          title={isCollapsed ? 'Clique para expandir' : 'Clique para recolher'}
+        >
+          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 transition-colors group-hover:bg-slate-100 shrink-0">
             {dateLabel.isToday ? (
               <Sun className="w-5 h-5 text-amber-500 fill-amber-500" />
             ) : dateLabel.isTomorrow ? (
@@ -238,17 +262,29 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             ) : (
               <Calendar className="w-5 h-5 text-sky-600" />
             )}
-            <h2 className="text-base font-bold text-slate-900">{dateLabel.title}</h2>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">{dateLabel.subtitle}</p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900 group-hover:text-sky-700 transition-colors">
+                {dateLabel.title}
+              </h2>
+              {/* Badge indicativo com contagem quando colapsado */}
+              {isCollapsed && (
+                <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                  {activeItems.length} atividade(s)
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">{dateLabel.subtitle}</p>
+          </div>
         </div>
 
-        {/* Controles de Navegação (Hoje, Amanhã, Setas, Picker) */}
+        {/* Controles de Navegação (Hoje, Amanhã, Setas, Picker e Toggle Retrátil) */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
             type="button"
             onClick={() => setSelectedDate(todayStr)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               selectedDate === todayStr
                 ? 'bg-slate-900 text-white shadow-2xs'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -260,7 +296,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
           <button
             type="button"
             onClick={() => setSelectedDate(shiftDateString(todayStr, 1))}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               selectedDate === shiftDateString(todayStr, 1)
                 ? 'bg-slate-900 text-white shadow-2xs'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -273,7 +309,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             <button
               type="button"
               onClick={() => setSelectedDate((prev) => shiftDateString(prev, -1))}
-              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg transition-colors"
+              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
               title="Dia anterior"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -281,7 +317,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             <button
               type="button"
               onClick={() => setSelectedDate((prev) => shiftDateString(prev, 1))}
-              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg transition-colors"
+              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
               title="Próximo dia"
             >
               <ChevronRight className="w-4 h-4" />
@@ -300,17 +336,39 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
               className="sr-only"
             />
             <span
-              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200 flex items-center gap-1 transition-colors"
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
               title="Escolher data específica"
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>{dateLabel.formattedDate}</span>
             </span>
           </label>
+
+          {/* Botão Retrátil (Collapse / Expand) */}
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 rounded-xl text-xs font-semibold border border-slate-200 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+            title={isCollapsed ? 'Expandir card' : 'Recolher card'}
+          >
+            {isCollapsed ? (
+              <>
+                <ChevronDown className="w-4 h-4 text-slate-600" />
+                <span className="hidden sm:inline text-[11px]">Expandir</span>
+              </>
+            ) : (
+              <>
+                <ChevronUp className="w-4 h-4 text-slate-600" />
+                <span className="hidden sm:inline text-[11px]">Recolher</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* Mini-Balanço / Métricas Rápidas do Dia */}
+      {!isCollapsed && (
+        <>
+          {/* Mini-Balanço / Métricas Rápidas do Dia */}
       <div className="flex items-center justify-between flex-wrap gap-2 text-xs text-slate-500 mb-4 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
         <div className="flex items-center gap-3 flex-wrap">
           <span>
@@ -487,6 +545,8 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );
