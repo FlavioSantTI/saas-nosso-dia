@@ -27,7 +27,8 @@ import {
   Check,
   BellRing,
   CalendarX,
-  Undo2
+  Undo2,
+  Search
 } from 'lucide-react';
 
 interface DailyBriefingCardProps {
@@ -41,6 +42,7 @@ interface DailyBriefingCardProps {
   onOpenSummary?: (tab?: 'today' | 'week') => void;
   onEventsChanged?: () => void;
   onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onOpenSearch?: () => void;
 }
 
 export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
@@ -48,7 +50,8 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
   responsibleFilterId,
   refreshTrigger,
   onEventsChanged,
-  onNotify
+  onNotify,
+  onOpenSearch
 }) => {
   const todayStr = getLocalDateString();
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
@@ -344,6 +347,19 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             </span>
           </label>
 
+          {/* Botão Buscar Atividades */}
+          {onOpenSearch && (
+            <button
+              type="button"
+              onClick={onOpenSearch}
+              className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-xl text-xs font-semibold border border-sky-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              title="Buscar atividades por palavra-chave (Ctrl+K)"
+            >
+              <Search className="w-3.5 h-3.5 text-sky-600" />
+              <span className="hidden sm:inline">Buscar</span>
+            </button>
+          )}
+
           {/* Botão Retrátil (Collapse / Expand) */}
           <button
             type="button"
@@ -368,6 +384,23 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
 
       {!isCollapsed && (
         <>
+          {/* Barra de Busca Amigável de Atividades e Aniversários */}
+          {onOpenSearch && (
+            <button
+              type="button"
+              onClick={onOpenSearch}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50/90 hover:bg-white text-slate-500 hover:text-slate-800 rounded-2xl border border-slate-200 hover:border-sky-300 transition-all text-xs font-medium shadow-2xs group mb-3 cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Search className="w-4 h-4 text-slate-400 group-hover:text-sky-600 transition-colors shrink-0" />
+                <span className="truncate">Buscar atividade por título ou aniversários (ex: Voleibol, Unimed, Terapia)...</span>
+              </div>
+              <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-white border border-slate-200 rounded-lg shadow-2xs shrink-0">
+                Ctrl + K
+              </kbd>
+            </button>
+          )}
+
           {/* Mini-Balanço / Métricas Rápidas do Dia */}
       <div className="flex items-center justify-between flex-wrap gap-2 text-xs text-slate-500 mb-4 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
         <div className="flex items-center gap-3 flex-wrap">

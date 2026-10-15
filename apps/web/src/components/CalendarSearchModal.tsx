@@ -21,13 +21,24 @@ interface CalendarSearchModalProps {
   onClose: () => void;
   familyId: string;
   onSelectDate: (dateStr: string) => void;
+  events?: any[];
+  members?: any[];
 }
+
+const normalizeStr = (str: string) =>
+  (str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 
 export const CalendarSearchModal: React.FC<CalendarSearchModalProps> = ({
   isOpen,
   onClose,
   familyId,
-  onSelectDate
+  onSelectDate,
+  events,
+  members
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<CalendarSearchResult[]>([]);
@@ -58,26 +69,245 @@ export const CalendarSearchModal: React.FC<CalendarSearchModalProps> = ({
   }, [isOpen, onClose]);
 
   const executeSearch = async (term: string) => {
-    const cleanTerm = term.trim();
-    if (!cleanTerm) {
+    const rawClean = term.trim();
+    if (!rawClean) {
       setResults([]);
       return;
     }
 
+    const normQ = normalizeStr(rawClean);
+    setIsSearching(true);
+
     try {
-      setIsSearching(true);
-      const { data, error } = await supabase.rpc('rpc_search_family_calendar', {
+      // 1. Tentar RPC do Supabase
+      const { data: rpcData, error: rpcError } = await supabase.rpc('rpc_search_family_calendar', {
         p_family_id: familyId,
-        p_query: cleanTerm
+        p_query: rawClean
       });
 
-      if (!error && Array.isArray(data)) {
-        setResults(data as CalendarSearchResult[]);
-      } else {
-        setResults([]);
+      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+        setResults(rpcData as CalendarSearchResult[]);
+        setIsSearching(false);
+        return;
       }
+
+      if (rpcError) {
+        console.warn('[CalendarSearchModal] RPC indisponível ou acesso restrito, usando fallback resiliente:', rpcError);
+      }
+
+      // 2. Fallback Resiliente (Client + Direct Supabase Query)
+      const combinedResults: CalendarSearchResult[] = [];
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0);
+
+      const dowNames = [
+        'Domingo',
+        'Segunda-feira',
+        'Terça-feira',
+        'Quarta-feira',
+        'Quinta-feira',
+        'Sexta-feira',
+        'Sábado'
+      ];
+
+      // A. Aniversários dos Membros da Família
+      const isBirthdayQuery =
+        normQ.includes('anivers') ||
+        normQ.includes('niver') ||
+        normQ.includes('paraben') ||
+        normQ.includes('bolo');
+
+      const familyMembersList = members && members.length > 0 ? members : [];
+
+      for (const m of familyMembersList) {
+        if (!m.birth_date) continue;
+        const normName = normalizeStr(m.name);
+        const normNickname = normalizeStr(m.nickname || '');
+
+        const matchesMember =
+          isBirthdayQuery ||
+          (normName && normQ.includes(normName)) ||
+          (normNickname && normQ.includes(normNickname)) ||
+          (normName && normName.includes(normQ)) ||
+          (normNickname && normNickname.includes(normQ));
+
+        if (matchesMember) {
+          const birthDateStr = String(m.birth_date).substring(0, 10);
+          const parts = birthDateStr.split('-');
+          if (parts.length >= 3) {
+            const bMonth = parseInt(parts[1], 10) - 1;
+            const bDay = parseInt(parts[2], 10);
+
+            let nextBday = new Date(currentYear, bMonth, bDay, 12, 0, 0);
+            if (nextBday < todayDateOnly) {
+              nextBday = new Date(currentYear + 1, bMonth, bDay, 12, 0, 0);
+            }
+
+            const diffTime = nextBday.getTime() - todayDateOnly.getTime();
+            const daysDiff = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+            const yyyy = nextBday.getFullYear();
+            const mm = String(nextBday.getMonth() + 1).padStart(2, '0');
+            const dd = String(nextBday.getDate()).padStart(2, '0');
+            const eventDateStr = `${yyyy}-${mm}-${dd}`;
+            const formatted = `${dd}/${mm}/${yyyy}`;
+            const dayOfWeek = dowNames[nextBday.getDay()];
+
+            combinedResults.push({
+              item_id: m.id,
+              item_type: 'BIRTHDAY',
+              title: `🎂 Aniversário de ${m.nickname || m.name}`,
+              event_date: eventDateStr,
+              event_date_formatted: formatted,
+              day_of_week: dayOfWeek,
+              time_local: 'Dia Todo',
+              location_name: 'Em Família',
+              responsible_name: m.nickname || m.name,
+              participants: [{ id: m.id, name: m.nickname || m.name, color: m.color || '#EA580C' }],
+              days_diff: daysDiff
+            });
+          }
+        }
+      }
+
+      // B. Eventos da Família
+      let candidateEvents: any[] = events && events.length > 0 ? [...events] : [];
+
+      try {
+        const { data: dbEvents } = await supabase
+          .from('events')
+          .select(`
+            id,
+            title,
+            start_time,
+            end_time,
+            is_all_day,
+            status,
+            notes,
+            location_id,
+            responsible_id,
+            locations ( name ),
+            responsible:family_members!events_responsible_id_fkey ( name, nickname ),
+            event_participants (
+              member:family_members ( id, name, nickname, color )
+            )
+          `)
+          .eq('family_id', familyId)
+          .neq('status', 'CANCELLED')
+          .ilike('title', `%${rawClean}%`)
+          .limit(40);
+
+        if (dbEvents && dbEvents.length > 0) {
+          const seenIds = new Set(candidateEvents.map((e) => e.id));
+          for (const dbe of dbEvents) {
+            if (!seenIds.has(dbe.id)) {
+              candidateEvents.push(dbe);
+              seenIds.add(dbe.id);
+            }
+          }
+        }
+      } catch (errDb) {
+        console.warn('[CalendarSearchModal] Falha silenciosa na busca remota direta:', errDb);
+      }
+
+      for (const ev of candidateEvents) {
+        if (ev.status === 'CANCELLED') continue;
+
+        const titleNorm = normalizeStr(ev.title);
+        const notesNorm = normalizeStr(ev.notes);
+        const locName = ev.locations?.name || ev.location?.name || '';
+        const locNorm = normalizeStr(locName);
+
+        const respName = ev.responsible?.nickname || ev.responsible?.name || '';
+        const respNorm = normalizeStr(respName);
+
+        let partsArr: any[] = [];
+        if (Array.isArray(ev.event_participants)) {
+          partsArr = ev.event_participants.map((ep: any) => ep.member).filter(Boolean);
+        } else if (Array.isArray(ev.participants)) {
+          partsArr = ev.participants;
+        }
+
+        const participantsMatch = partsArr.some((p: any) =>
+          normalizeStr(p?.name).includes(normQ) || normalizeStr(p?.nickname || '').includes(normQ)
+        );
+
+        const matches =
+          titleNorm.includes(normQ) ||
+          notesNorm.includes(normQ) ||
+          locNorm.includes(normQ) ||
+          respNorm.includes(normQ) ||
+          participantsMatch;
+
+        if (matches) {
+          const rawDateStr = String(ev.start_time || '').substring(0, 10);
+          if (!rawDateStr || rawDateStr.length < 10) continue;
+
+          const [y, m, d] = rawDateStr.split('-').map(Number);
+          const evDate = new Date(y, m - 1, d, 12, 0, 0);
+
+          const diffTime = evDate.getTime() - todayDateOnly.getTime();
+          const daysDiff = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+          const formatted = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+          const dayOfWeek = dowNames[evDate.getDay()];
+
+          let timeLocal = 'Dia Todo';
+          if (!ev.is_all_day && ev.start_time) {
+            const timeMatch = String(ev.start_time).match(/[T\s](\d{2}:\d{2})/);
+            if (timeMatch) {
+              timeLocal = timeMatch[1];
+            }
+          }
+
+          combinedResults.push({
+            item_id: ev.id,
+            item_type: 'EVENT',
+            title: ev.title || 'Sem título',
+            event_date: rawDateStr,
+            event_date_formatted: formatted,
+            day_of_week: dayOfWeek,
+            time_local: timeLocal,
+            location_name: locName || null,
+            responsible_name: respName || null,
+            participants: partsArr.map((p: any) => ({
+              id: p.id,
+              name: p.nickname || p.name,
+              color: p.color || '#0284c7'
+            })),
+            days_diff: daysDiff
+          });
+        }
+      }
+
+      // Ordenação: futuros primeiro (menor days_diff), passados por mais recentes
+      combinedResults.sort((a, b) => {
+        const aFuture = a.days_diff >= 0;
+        const bFuture = b.days_diff >= 0;
+        if (aFuture && !bFuture) return -1;
+        if (!aFuture && bFuture) return 1;
+        if (aFuture && bFuture) {
+          if (a.days_diff !== b.days_diff) return a.days_diff - b.days_diff;
+          return a.event_date.localeCompare(b.event_date);
+        }
+        return b.days_diff - a.days_diff;
+      });
+
+      // Deduplicação
+      const uniqueResults: CalendarSearchResult[] = [];
+      const seen = new Set<string>();
+      for (const res of combinedResults) {
+        const key = `${res.item_type}_${res.item_id}_${res.event_date}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueResults.push(res);
+        }
+      }
+
+      setResults(uniqueResults.slice(0, 40));
     } catch (err) {
-      console.error('Erro na busca do calendário:', err);
+      console.error('[CalendarSearchModal] Erro ao buscar atividades:', err);
       setResults([]);
     } finally {
       setIsSearching(false);

@@ -1707,6 +1707,7 @@ export const App: React.FC = () => {
             onOpenSummary={handleOpenSummary}
             onEventsChanged={loadData}
             onNotify={showToast}
+            onOpenSearch={() => setIsSearchOpen(true)}
           />
         </div>
 
@@ -1916,6 +1917,8 @@ export const App: React.FC = () => {
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         familyId={family.id}
+        events={events}
+        members={members}
         onSelectDate={(dateStr) => {
           const parsed = parseSafeLocalDate(dateStr);
           setCurrentDate(parsed);
