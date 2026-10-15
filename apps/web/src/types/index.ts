@@ -1,10 +1,17 @@
 export type MemberRole = 'ADMIN' | 'MEMBER' | 'CHILD';
 export type EventStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+export type SubscriptionStatus = 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELLED' | 'EXPIRED';
 
 export interface Family {
   id: string;
   name: string;
   timezone: string;
+  plan_name?: string;
+  plan_badge?: string;
+  plan_status?: SubscriptionStatus;
+  plan_expires_at?: string;
+  plan_days_remaining?: number;
+  ai_credits_limit?: number;
 }
 
 export interface FamilyMember {

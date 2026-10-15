@@ -590,7 +590,59 @@ export const App: React.FC = () => {
           window.history.replaceState({}, '', window.location.pathname);
         }
 
-        currentFamily = familiesData[0];
+        const rawFamily = familiesData[0];
+        let enrichedFamily: Family = {
+          ...rawFamily,
+          plan_name: 'Família Pro IA Anual',
+          plan_badge: 'Pro IA',
+          plan_status: 'ACTIVE',
+          plan_expires_at: '15/10/2027',
+          plan_days_remaining: 365,
+          ai_credits_limit: 250
+        };
+
+        try {
+          const { data: subData } = await supabase
+            .from('subscriptions')
+            .select(`
+              id,
+              status,
+              billing_cycle,
+              expires_at,
+              ai_credits_used,
+              plans (
+                id,
+                name,
+                monthly_ai_credits
+              )
+            `)
+            .eq('family_id', rawFamily.id)
+            .maybeSingle();
+
+          if (subData) {
+            const planObj = subData.plans as any;
+            const expDate = subData.expires_at ? new Date(subData.expires_at) : null;
+            const daysRem = expDate
+              ? Math.max(0, Math.ceil((expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+              : 365;
+            const formattedExp = expDate ? expDate.toLocaleDateString('pt-BR') : '15/10/2027';
+            const planName = planObj?.name || (subData.billing_cycle === 'YEARLY' ? 'Família Pro IA Anual' : 'Família Pro IA');
+
+            enrichedFamily = {
+              ...enrichedFamily,
+              plan_name: planName,
+              plan_badge: planName.includes('Pro') ? 'Pro IA' : (planName.includes('Essencial') ? 'Essencial' : 'Degustação'),
+              plan_status: subData.status,
+              plan_expires_at: formattedExp,
+              plan_days_remaining: daysRem,
+              ai_credits_limit: planObj?.monthly_ai_credits || 250
+            };
+          }
+        } catch (subErr) {
+          console.warn('Subscrição fallback:', subErr);
+        }
+
+        currentFamily = enrichedFamily;
         setFamily(currentFamily);
       }
 

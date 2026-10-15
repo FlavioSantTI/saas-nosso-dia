@@ -14,6 +14,11 @@ import {
   ShieldCheck,
   Loader2,
   RefreshCw,
+  Crown,
+  Zap,
+  X,
+  Calendar,
+  Clock
 } from 'lucide-react';
 import { APP_VERSION } from '../constants/version';
 
@@ -57,6 +62,14 @@ export const Header: React.FC<HeaderProps> = ({
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
+  const [showPlanModal, setShowPlanModal] = useState(false);
+
+  const planBadgeText = family.plan_badge || 'Pro IA';
+  const planFullName = family.plan_name || 'Família Pro IA Anual';
+  const isTrial = family.plan_status === 'TRIAL';
+  const daysRemaining = family.plan_days_remaining ?? 365;
+  const expiresAtFormatted = family.plan_expires_at || '15/10/2027';
+
   const handleLogoutClick = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
@@ -97,7 +110,8 @@ export const Header: React.FC<HeaderProps> = ({
   const hasActiveSession = !!currentUser;
 
   return (
-    <header className="bg-white/85 backdrop-blur-md border-b border-sky-100/80 sticky top-0 z-30 shadow-xs">
+    <>
+      <header className="bg-white/85 backdrop-blur-md border-b border-sky-100/80 sticky top-0 z-30 shadow-xs">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between">
         {/* Lado Esquerdo: Identidade da Família (Compacto no Mobile) */}
         <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
@@ -135,9 +149,28 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
             </div>
-            <p className="text-[10px] sm:text-xs text-slate-500 font-medium truncate max-w-[90px] sm:max-w-xs">
-              {family.name}
-            </p>
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="text-[10px] sm:text-xs text-slate-500 font-medium truncate max-w-[110px] sm:max-w-xs">
+                {family.name}
+              </span>
+              <span className="text-slate-300 text-xs">•</span>
+              <button
+                type="button"
+                onClick={() => setShowPlanModal(true)}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all shadow-2xs cursor-pointer ${
+                  isTrial
+                    ? 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+                }`}
+                title="Ver vigência e detalhes da assinatura"
+              >
+                <Crown className="w-2.5 h-2.5 text-indigo-600" />
+                <span>
+                  {planBadgeText}
+                  {isTrial ? ` (${daysRemaining} dias)` : ''}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -498,5 +531,84 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
     </header>
+
+      {/* Modal de Detalhes da Vigência e Assinatura */}
+      {showPlanModal && (
+        <div
+          onClick={() => setShowPlanModal(false)}
+          className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  <Crown className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">{planFullName}</h3>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full mt-0.5">
+                    <ShieldCheck className="w-3 h-3" /> Assinatura Ativa
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowPlanModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg font-bold cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Caixa de Vigência */}
+            <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-3.5 mb-4 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600" /> Válido até:
+                </span>
+                <strong className="text-slate-900">{expiresAtFormatted}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-indigo-600" /> Dias restantes:
+                </span>
+                <strong className="text-indigo-700">{daysRemaining} dias</strong>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-3 leading-relaxed">
+              Recursos liberados para a sua casa:
+            </p>
+
+            <div className="space-y-2.5 text-xs text-slate-700 bg-slate-50 p-4 rounded-2xl border border-slate-200/80 mb-5">
+              <div className="flex items-center gap-2 font-medium">
+                <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>Captura Inteligente com Gemini IA (Texto, Voz e Fotos)</span>
+              </div>
+              <div className="flex items-center gap-2 font-medium">
+                <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>Resumo Familiar & Briefing Matinal no WhatsApp</span>
+              </div>
+              <div className="flex items-center gap-2 font-medium">
+                <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>Alarmes no Celular e Membros Ilimitados</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPlanModal(false)}
+              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors shadow-2xs cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
