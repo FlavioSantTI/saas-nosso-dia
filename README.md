@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v2.0.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v2.1.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -35,35 +35,51 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
 
 ## ✨ Principais Funcionalidades
 
-### 🗓️ 1. Grade Semanal & Visões Temporais
+### 🔍 1. Busca Rápida de Atividades & Aniversários Familiares
+- **Busca por Palavra-Chave:** Encontre qualquer compromisso ou rotina digitando termos diretos (ex.: `unimed`, `voleibol`, `aniversario`, `terapia`).
+- **Resiliente a Acentos (`unaccent`):** Pesquise com ou sem acentos (`volei` acha `vôlei`, `aniversario` acha `aniversário`).
+- **Atalhos Rápidos em 1 Clique:** Chips instantâneos para *🎂 Aniversários da Família*, *🏐 Voleibol*, *🎉 Festas & Eventos*, *🏫 Escola* e *🩺 Terapia / Consultas*.
+- **Contagem Regressiva & Badges Temporais:** Destaque visual imediato para `É HOJE! 🎯`, `É amanhã`, `Em X dias` ou `Ontem`.
+- **Navegação Imediata:** Clique no resultado para viajar no tempo e abrir o dia diretamente no painel familiar.
+- **Atalho Universal:** Abra a qualquer momento pressionando `Ctrl + K` (ou `Cmd + K`).
+
+### ☀️ 2. Card de Resumo Familiar Retrátil & Métricas do Dia
+- **Modo Retrátil (Collapse/Expand):** Recolha ou expanda o card de resumo matinal/noturno com 1 clique e persistência automática no navegador.
+- **Busca Integrada no Card:** Barra de busca perfeitamente posicionada dentro da rotina familiar, mantendo o Header limpo e desobstruído.
+- **Navegação Temporal:** Botões de alternância rápida entre `[ Hoje ]`, `[ Amanhã ]`, navegação dia-a-dia (`<` e `>`) e seletor de data.
+- **Exportação para WhatsApp:** Cópia instantânea da programação do dia formatada para compartilhamento familiar.
+
+### 🗓️ 3. Grade Semanal & Visões Temporais
 - **Visão Semanal Viva:** Exibição clara de segunda a domingo com contadores de atividades e destaque do dia de hoje.
 - **Empty States Acolhedores:** Mensagens motivacionais e amigáveis em dias livres (*"Dia livre para relaxar! ☀️"*).
 - **Visão Diária Detalhada & Visão Mensal:** Navegação completa em formato cápsula (estilo macOS/iOS) para inspecionar meses e dias com precisão.
 - **Drag & Drop:** Arraste e solte atividades entre dias da semana para reagendamento ágil.
+- **Balanço da Semana:** Análise da distribuição de carga e responsabilidades entre os adultos da casa.
 
-### 👨‍👩‍👧‍👦 2. Gestão Familiar & Membros Multi-Tenant
+### 👨‍👩‍👧‍👦 4. Gestão Familiar & Membros Multi-Tenant
 - **Cores Distintivas por Membro:** Cada participante possui sua cor de identificação rápida (ex.: Flávio em Azul Oceano, Silvia em Terracota, Rafael em Verde Sálvia).
 - **Filtro Rápido por Pessoa:** Filtre a grade com 1 clique para ver a agenda de um filho ou de toda a família.
 - **Convite Dinâmico:** Link de convite gerado dinamicamente para o domínio atual (`window.location.origin`), pronto para WhatsApp.
 - **Perfis Gerenciados vs Adultos:** Dependentes/crianças não necessitam de login; adultos possuem gestão de permissões.
 
-### 🔄 3. Rotinas Recorrentes & Exclusão Seletiva
+### 🔄 5. Rotinas Recorrentes & Exclusão Seletiva
 - **Geração Inteligente de Ocorrências:** Cadastro de rotinas semanais (ex.: Natação ter/qui às 18h) com expansão automática no calendário.
 - **Exclusão Seletiva (Estilo Google Calendar):**
   - 🗑️ *Apenas esta ocorrência* — apaga o dia selecionado mantendo os outros intactos.
   - 🔥 *Excluir esta e todas as futuras* — apaga em série e encerra a rotina no banco.
 
-### 🤖 4. Captura Rápida Multimodal com Gemini (Fase 2)
+### 🤖 6. Captura Rápida Multimodal com Gemini
 - **📝 Texto:** Cole textos brutos vindos do WhatsApp, recados da escola ou lembretes.
 - **🎙️ Mensagem de Voz:** Grave instruções de áudio pelo navegador com o `MediaRecorder` nativo e transcrição/estruturação via Gemini Flash.
 - **📸 Fotos & Documentos (PDF):** Envie fotos de avisos escolares, bilhetes impressos ou calendários em PDF para análise visual da IA.
-- **Card de Confirmação:** Extração com Structured Outputs (JSON Schema), exibindo badges coloridos dos membros identificados (Flávio, Silvia, Rafael) e papéis (Participante e Responsável).
+- **Card de Confirmação:** Extração com Structured Outputs (JSON Schema), associando automaticamente filhos e responsáveis da família.
+- **Horário Local Real:** Interpretação precisa de termos relativos ("amanhã", "quinta-feira") calibrada no fuso local (UTC-3).
 
-### ⚠️ 5. Alerta de Conflitos & Atividades Sem Responsável
+### ⚠️ 7. Alerta de Conflitos & Atividades Sem Responsável
 - **Detecção de Sobreposição:** Alerta visual proeminente quando o mesmo adulto tiver dois compromissos no mesmo horário.
 - **Banner de Atividades Pendentes:** Aviso fixo quando houver eventos sem responsável definido, com modal de atribuição rápida em lote.
 
-### 🔔 6. Notificações & Lembretes Locais
+### 🔔 8. Notificações & Lembretes Locais
 - Disparo de notificações no navegador com tempo customizável (5, 10, 15 ou 30 min antes).
 
 ---
@@ -189,6 +205,26 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v2.1.0] — 2026-10-14
+#### 🔍 Busca Rápida de Atividades & Resumo Familiar Retrátil
+- **Busca Rápida de Atividades & Aniversários (`CalendarSearchModal.tsx`):**
+  - Busca instantânea por qualquer palavra-chave no título, notas, local e responsáveis (ex.: `unimed`, `voleibol`, `aniversario`, `terapia`).
+  - Tratamento sem acentos via normalização fonética (`unaccent`), permitindo encontrar `vôlei` digitando `volei`.
+  - Chips rápidos com 1 clique para dúvidas frequentes (*🎂 Aniversários da Família*, *🏐 Voleibol*, *🎉 Festas & Eventos*, *🏫 Escola*, *🩺 Terapia / Consultas*).
+  - Cálculo dinâmico de contagem regressiva para aniversários dos membros da família com badges visuais (`É HOJE! 🎯`, `É amanhã`, `Em X dias`).
+  - Navegação instantânea ao clicar no item com viagem no tempo para o dia correspondente e rolagem suave até a programação.
+  - **Fallback Triplo Resiliente:** Prioriza a RPC PostgreSQL `rpc_search_family_calendar`, com contingência transparente via consulta direta Supabase e memória RAM client-side contra falhas de rede ou restrições de permissão.
+- **Card de Resumo Familiar Retrátil & Busca Integrada (`DailyBriefingCard.tsx`):**
+  - Modo Retrátil (Collapse/Expand) com alternador suave e persistência no `localStorage` (`nosso_dia_briefing_collapsed`).
+  - Barra de busca posicionada no contexto do resumo diário da família com indicador visual do atalho `Ctrl + K`.
+  - Botão dedicado `[ 🔍 Buscar ]` no cabeçalho de datas do card.
+- **Despoluição e Ergonomia Visual do Header (`Header.tsx` & `CalendarNavigation.tsx`):**
+  - Remoção de botões duplicados entre o Header e a grade semanal (`Resumo & Balanço` consolidado como `Balanço` na barra temporal).
+  - Header mais limpo, espaçoso e sem espremimento em desktops e smartphones.
+- **Gestão de Vigência e Planos de Assinatura (`AdminSubscriptionManagement.tsx`):**
+  - Controle de expiração e contagem automática de dias restantes (`days_remaining`).
+  - Atalhos de 1 clique para extensão de vigência (`+14 dias`, `+30 dias`, `+1 ano` ou data customizada).
 
 ### [v2.0.0] — 2026-10-14
 #### 🚀 Versão Oficial de Produção 2.0 & Sistema de Atualização Contínua do PWA
