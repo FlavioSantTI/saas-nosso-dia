@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FamilyMember } from '../types';
 import { requestNotificationPermission } from '../lib/notifications';
 import {
@@ -13,6 +13,7 @@ interface AddManualActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   members: FamilyMember[];
+  initialData?: any;
   onSave: (activity: any) => Promise<void> | void;
 }
 
@@ -20,10 +21,12 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
   isOpen,
   onClose,
   members,
+  initialData,
   onSave
 }) => {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'RECURRING' | 'SINGLE'>('RECURRING');
+  const [singleDate, setSingleDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [days, setDays] = useState<string[]>([]);
   const [isAllDay, setIsAllDay] = useState(false);
   const [startTime, setStartTime] = useState('');
@@ -35,6 +38,64 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
   const [endDate, setEndDate] = useState(''); // data final opcional para rotinas
   const [isSaving, setIsSaving] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
+
+  // Sincroniza initialData vindo da IA ou reseta ao abrir/fechar
+  useEffect(() => {
+    if (isOpen) {
+      if (initialData) {
+        setTitle(initialData.title || '');
+        const targetType = initialData.type || (initialData.date_str ? 'SINGLE' : 'RECURRING');
+        setType(targetType);
+        if (initialData.date_str) {
+          setSingleDate(initialData.date_str);
+        } else {
+          setSingleDate(new Date().toISOString().split('T')[0]);
+        }
+        setDays(Array.isArray(initialData.days) ? initialData.days : []);
+        setIsAllDay(Boolean(initialData.is_all_day));
+        setStartTime(initialData.startTime || initialData.time || '14:00');
+        setDuration(String(initialData.duration || 60));
+        setLocation(initialData.location || initialData.locationName || '');
+
+        if (Array.isArray(initialData.participants) && initialData.participants.length > 0) {
+          setSelectedParticipants(initialData.participants.map((p: any) => p.id));
+        } else if (initialData.participant?.id) {
+          setSelectedParticipants([initialData.participant.id]);
+        } else if (members.length > 0) {
+          setSelectedParticipants([members[0].id]);
+        }
+
+        if (initialData.responsible?.id) {
+          setResponsibleId(initialData.responsible.id);
+        } else {
+          const firstAdmin = members.find((m) => m.role === 'ADMIN');
+          if (firstAdmin) setResponsibleId(firstAdmin.id);
+        }
+
+        if (initialData.reminder_minutes !== undefined) {
+          setReminderMinutes(initialData.reminder_minutes);
+        }
+        if (initialData.end_date) {
+          setEndDate(initialData.end_date);
+        }
+      } else {
+        // Reset para abertura manual padrão
+        setTitle('');
+        setType('RECURRING');
+        setSingleDate(new Date().toISOString().split('T')[0]);
+        setDays([]);
+        setIsAllDay(false);
+        setStartTime('');
+        setDuration('60');
+        setSelectedParticipants([]);
+        setResponsibleId('');
+        setLocation('');
+        setReminderMinutes(15);
+        setEndDate('');
+      }
+      setTitleError(null);
+    }
+  }, [isOpen, initialData, members]);
 
   if (!isOpen) return null;
 
@@ -89,10 +150,18 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
       const participants = members.filter(m => selectedParticipants.includes(m.id));
       const cleanLocation = sanitizeInput(location, MAX_LOCATION_NAME_LENGTH);
       
+      let eventDays = days;
+      if (type === 'SINGLE') {
+        const dateObj = new Date(`${singleDate}T12:00:00`);
+        const dayIds = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+        eventDays = [dayIds[dateObj.getDay()]];
+      }
+
       await onSave({
         title: cleanTitle,
         type,
-        days,
+        days: eventDays,
+        date_str: type === 'SINGLE' ? singleDate : null,
         is_all_day: isAllDay,
         startTime: isAllDay ? '00:00' : (startTime.trim() || '12:00'),
         duration: isAllDay ? 1440 : parseInt(duration, 10),
@@ -100,12 +169,13 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
         responsible,
         location: cleanLocation,
         reminder_minutes: reminderMinutes,
-        end_date: endDate || null
+        end_date: type === 'RECURRING' ? (endDate || null) : null
       });
 
       // Reset form
       setTitle('');
       setType('RECURRING');
+      setSingleDate(new Date().toISOString().split('T')[0]);
       setDays([]);
       setIsAllDay(false);
       setStartTime('');
@@ -138,6 +208,15 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
             ✕
           </button>
         </div>
+
+        {initialData && (
+          <div className="mx-6 mt-4 p-3 bg-amber-50/90 border border-amber-200/90 rounded-2xl flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 text-amber-900 font-semibold">
+              <span className="text-base">✨</span>
+              <span>Dados preenchidos pela Inteligência Artificial. Revise e confirme antes de salvar.</span>
+            </div>
+          </div>
+        )}
 
         <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-4.5 text-slate-800">
           {/* Título com Contador Visual e maxLength */}
@@ -198,6 +277,50 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Seletor de Data para Evento Pontual */}
+          {type === 'SINGLE' && (
+            <div className="flex flex-col gap-1.5 border-b border-slate-100 pb-4">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Data do Evento Pontual *
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSingleDate(new Date().toISOString().split('T')[0]);
+                    }}
+                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg cursor-pointer transition-colors ${
+                      singleDate === new Date().toISOString().split('T')[0]
+                        ? 'bg-sky-100 text-sky-800 border border-sky-300'
+                        : 'text-slate-500 hover:bg-slate-100 border border-transparent'
+                    }`}
+                  >
+                    Hoje
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + 1);
+                      setSingleDate(d.toISOString().split('T')[0]);
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:bg-slate-100 px-2.5 py-0.5 rounded-lg cursor-pointer transition-colors border border-transparent"
+                  >
+                    Amanhã
+                  </button>
+                </div>
+              </div>
+              <input
+                type="date"
+                required
+                value={singleDate}
+                onChange={(e) => setSingleDate(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-sm font-semibold transition-all bg-white cursor-pointer"
+              />
+            </div>
+          )}
 
           {/* Dias da Semana e Data Final (Se rotina) */}
           {type === 'RECURRING' && (

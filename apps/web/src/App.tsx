@@ -380,6 +380,7 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
+  const [manualAddInitialData, setManualAddInitialData] = useState<any>(null);
   const [isManageFamilyOpen, setIsManageFamilyOpen] = useState(false);
   const [selectedEventForEdit, setSelectedEventForEdit] = useState<EventItem | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -1476,23 +1477,11 @@ export const App: React.FC = () => {
     }
   };
 
-  // Handler para adição via IA
-  const handleConfirmQuickAdd = async (parsed: any) => {
-    await saveActivityToSupabase({
-      title: parsed.title,
-      type: parsed.type || (parsed.days && parsed.days.length > 0 ? 'RECURRING' : 'SINGLE'),
-      startTime: parsed.startTime || parsed.time || '18:00',
-      duration: parsed.duration || 60,
-      days: parsed.days || [],
-      date_str: parsed.date_str || null,
-      locationName: parsed.locationName || parsed.location,
-      responsible: parsed.responsible,
-      participants: parsed.participants || (parsed.participant ? [parsed.participant] : []),
-      reminder_minutes: parsed.reminder_minutes !== undefined ? parsed.reminder_minutes : 15,
-      is_all_day: parsed.is_all_day || false,
-      end_date: null
-    });
+  // Handler para adição via IA: equaliza com a interface padrão passando dados pré-preenchidos
+  const handleConfirmQuickAdd = (parsed: any) => {
     setIsQuickAddOpen(false);
+    setManualAddInitialData(parsed);
+    setIsManualAddOpen(true);
   };
 
   // Handler para adição manual
@@ -1501,6 +1490,7 @@ export const App: React.FC = () => {
       title: manualData.title,
       type: manualData.type,
       days: manualData.days || [],
+      date_str: manualData.date_str || null,
       is_all_day: manualData.is_all_day,
       startTime: manualData.startTime || '12:00',
       duration: manualData.duration || 60,
@@ -1511,6 +1501,7 @@ export const App: React.FC = () => {
       end_date: manualData.end_date || null
     });
     setIsManualAddOpen(false);
+    setManualAddInitialData(null);
   };
 
   // 1. Tela de Carregamento Inicial Neutra (evita qualquer flash de tela antes da verificação da sessão)
@@ -1622,7 +1613,10 @@ export const App: React.FC = () => {
         family={family}
         onOpenManageFamily={() => setIsManageFamilyOpen(true)}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-        onOpenNewActivity={() => setIsManualAddOpen(true)}
+        onOpenNewActivity={() => {
+          setManualAddInitialData(null);
+          setIsManualAddOpen(true);
+        }}
         onOpenSummary={handleOpenSummary}
         currentUser={currentUser}
         currentMember={currentMember}
@@ -1784,8 +1778,12 @@ export const App: React.FC = () => {
       {/* Modal: Nova Atividade Manual */}
       <AddManualActivityModal
         isOpen={isManualAddOpen}
-        onClose={() => setIsManualAddOpen(false)}
+        onClose={() => {
+          setIsManualAddOpen(false);
+          setManualAddInitialData(null);
+        }}
         members={members}
+        initialData={manualAddInitialData}
         onSave={handleConfirmManualAdd}
       />
 
