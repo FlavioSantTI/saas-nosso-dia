@@ -3,6 +3,7 @@ import { FamilyMember } from '../types';
 import {
   extractRoutineWithGemini,
   getGeminiApiKey,
+  getLocalGeminiApiKey,
   setGeminiApiKey,
   ExtractedRoutineData
 } from '../lib/gemini';
@@ -49,7 +50,7 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
 
   // Configuração da Chave Gemini
   const [showKeyConfig, setShowKeyConfig] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(() => getGeminiApiKey());
+  const [apiKeyInput, setApiKeyInput] = useState(() => getLocalGeminiApiKey());
   const [keySaved, setKeySaved] = useState(false);
 
   // Prévia Estruturada
@@ -138,8 +139,8 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   const handleExtractWithGemini = async () => {
     setErrorMessage(null);
 
-    const hasKey = Boolean(getGeminiApiKey());
-    if (!hasKey) {
+    const activeKey = await getGeminiApiKey();
+    if (!activeKey) {
       setShowKeyConfig(true);
       return;
     }

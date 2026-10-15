@@ -208,7 +208,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e
   - **Reconhecimento de Voz:** Ditado por voz com Web Speech API nativa em `pt-BR`.
   - **Visão Computacional:** Processamento multimodal de fotos de bilhetes escolares ou calendários em papel diretamente pela câmera/upload.
   - **Casamento Inteligente:** Associação automática com filhos e responsáveis cadastrados na família.
-  - **Gestão de Chave:** Suporte a `VITE_GEMINI_API_KEY` ou inserção direta no modal com persistência local.
+- **Gestão de Chaves de IA com Criptografia em Repouso AES-256 (`AdminUserManagement.tsx` e `gemini.ts`):**
+  - **Criptografia Militar no Banco:** OpenPGP `pgcrypto` (`extensions.pgp_sym_encrypt`) com algoritmo AES-256 na tabela `public.platform_settings`.
+  - **Zero-Knowledge no Admin:** O painel nunca expõe a chave em texto puro, exibindo apenas o fingerprint mascarado (`key_fingerprint`, ex.: `AIza...9x`) e o selo `🔒 Criptografado AES-256`.
+  - **Descriptografia em Memória RAM (`get_active_ai_key`):** Ao acionar a IA, a chave é descriptografada estritamente durante a transação em memória, sem exposição a usuários comuns ou em logs.
 
 ### [v1.5.8] — 2026-10-14
 #### 📅 Navegação Temporal no Resumo Familiar & Cancelamento Pontual de Atividades

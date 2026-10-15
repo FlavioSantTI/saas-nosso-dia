@@ -1,6 +1,7 @@
 import { FamilyMember } from '../types';
+import { supabase } from './supabase';
 
-export function getGeminiApiKey(): string {
+export function getLocalGeminiApiKey(): string {
   return (
     import.meta.env.VITE_GEMINI_API_KEY ||
     localStorage.getItem('nosso_dia_gemini_key') ||
@@ -10,6 +11,25 @@ export function getGeminiApiKey(): string {
 
 export function setGeminiApiKey(key: string): void {
   localStorage.setItem('nosso_dia_gemini_key', key.trim());
+}
+
+/**
+ * Obtém a chave ativa da API do Gemini:
+ * 1. Primeiro tenta obter a chave descriptografada em memória (RAM) via RPC do Supabase
+ *    armazenada com OpenPGP AES-256 na tabela platform_settings.
+ * 2. Em caso de fallback (offline ou sem RPC), utiliza a variável de ambiente ou chave local.
+ */
+export async function getGeminiApiKey(): Promise<string> {
+  try {
+    const { data, error } = await supabase.rpc('get_active_ai_key', { p_provider: 'gemini' });
+    if (!error && data && typeof data === 'string' && data.trim()) {
+      return data.trim();
+    }
+  } catch (err) {
+    // Silencioso se offline ou não autenticado
+  }
+
+  return getLocalGeminiApiKey();
 }
 
 export interface ExtractedRoutineData {
@@ -40,10 +60,10 @@ export async function extractRoutineWithGemini(
   imageMimeType: string | null,
   members: FamilyMember[]
 ): Promise<ExtractedRoutineData> {
-  const apiKey = getGeminiApiKey();
+  const apiKey = await getGeminiApiKey();
 
   if (!apiKey) {
-    throw new Error('Chave da API do Google Gemini não configurada. Insira sua chave gratuita do Google AI Studio.');
+    throw new Error('Chave da API do Google Gemini não configurada. Configure no Painel Super-Admin ou insira sua chave do Google AI Studio.');
   }
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
