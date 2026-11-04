@@ -87,22 +87,23 @@ export const CalendarNavigation: React.FC<CalendarNavigationProps> = ({
     today.getFullYear() === currentDate.getFullYear();
 
   return (
-    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/80 backdrop-blur-xs p-3 sm:px-4 sm:py-3 rounded-2xl border border-sky-100/90 shadow-2xs mb-4">
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/90 backdrop-blur-xs p-3 sm:px-4 sm:py-3.5 rounded-2xl border border-sky-100 shadow-2xs mb-4">
       {/* Controles de Data e Título */}
       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={onPrev}
-            className="w-8 h-8 flex items-center justify-center rounded-xl bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 shadow-2xs hover:text-slate-900 transition-colors cursor-pointer"
+            className="w-11 h-11 flex items-center justify-center rounded-xl bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 shadow-2xs hover:text-slate-900 transition-colors cursor-pointer"
             title="Período anterior"
+            aria-label="Período anterior"
           >
-            <ChevronLeft className="w-4 h-4 text-slate-600" />
+            <ChevronLeft className="w-5 h-5 text-slate-600" />
           </button>
           <button
             type="button"
             onClick={onToday}
-            className={`px-3 py-1.5 h-8 flex items-center justify-center rounded-xl text-xs font-bold transition-all shadow-2xs border cursor-pointer ${
+            className={`px-3.5 h-11 flex items-center justify-center rounded-xl text-caption font-bold transition-all shadow-2xs border cursor-pointer ${
               isToday
                 ? 'bg-sky-600 border-sky-600 text-white shadow-xs'
                 : 'bg-white border-sky-100 hover:bg-sky-50 text-slate-700'
@@ -113,14 +114,15 @@ export const CalendarNavigation: React.FC<CalendarNavigationProps> = ({
           <button
             type="button"
             onClick={onNext}
-            className="w-8 h-8 flex items-center justify-center rounded-xl bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 shadow-2xs hover:text-slate-900 transition-colors cursor-pointer"
+            className="w-11 h-11 flex items-center justify-center rounded-xl bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 shadow-2xs hover:text-slate-900 transition-colors cursor-pointer"
             title="Próximo período"
+            aria-label="Próximo período"
           >
-            <ChevronRight className="w-4 h-4 text-slate-600" />
+            <ChevronRight className="w-5 h-5 text-slate-600" />
           </button>
         </div>
 
-        <h2 className="text-sm sm:text-base font-bold text-slate-800 tracking-tight select-none flex items-center gap-2">
+        <h2 className="text-body sm:text-title-sm font-bold text-slate-900 tracking-tight select-none flex items-center gap-2">
           <CalendarIcon className="w-4 h-4 text-sky-600 hidden sm:inline" />
           <span>{title}</span>
         </h2>
@@ -132,21 +134,21 @@ export const CalendarNavigation: React.FC<CalendarNavigationProps> = ({
           <button
             type="button"
             onClick={() => onOpenSummary('week')}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-50/80 hover:bg-sky-100/80 text-sky-800 border border-sky-200/70 transition-all shadow-2xs cursor-pointer"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 h-10 rounded-xl text-caption font-bold bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 transition-all shadow-2xs cursor-pointer"
             title="Ver Balanço da Semana"
           >
-            <BarChart3 className="w-3.5 h-3.5 text-sky-600" />
+            <BarChart3 className="w-4 h-4 text-sky-600" />
             <span>Balanço</span>
           </button>
         )}
-        <div className="inline-flex bg-slate-200/50 p-1 rounded-xl gap-1 w-full sm:w-auto border border-slate-200/40">
+        <div className="inline-flex bg-slate-200/60 p-1 rounded-xl gap-1 w-full sm:w-auto border border-slate-200/60 h-10 items-center">
           <button
             type="button"
             onClick={() => onViewModeChange('day')}
-            className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+            className={`flex-1 sm:flex-initial px-4 py-1.5 h-8 rounded-lg text-body-sm sm:text-caption transition-all cursor-pointer ${
               viewMode === 'day'
                 ? 'bg-white text-slate-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 font-medium'
+                : 'text-slate-600 hover:text-slate-900 font-semibold'
             }`}
           >
             Dia
@@ -154,10 +156,10 @@ export const CalendarNavigation: React.FC<CalendarNavigationProps> = ({
           <button
             type="button"
             onClick={() => onViewModeChange('week')}
-            className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+            className={`flex-1 sm:flex-initial px-4 py-1.5 h-8 rounded-lg text-body-sm sm:text-caption transition-all cursor-pointer ${
               viewMode === 'week'
                 ? 'bg-white text-slate-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 font-medium'
+                : 'text-slate-600 hover:text-slate-900 font-semibold'
             }`}
           >
             Semana
@@ -165,10 +167,10 @@ export const CalendarNavigation: React.FC<CalendarNavigationProps> = ({
           <button
             type="button"
             onClick={() => onViewModeChange('month')}
-            className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+            className={`flex-1 sm:flex-initial px-4 py-1.5 h-8 rounded-lg text-body-sm sm:text-caption transition-all cursor-pointer ${
               viewMode === 'month'
                 ? 'bg-white text-slate-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900 font-medium'
+                : 'text-slate-600 hover:text-slate-900 font-semibold'
             }`}
           >
             Mês

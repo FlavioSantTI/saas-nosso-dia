@@ -68,17 +68,21 @@ export const UnassignedActivitiesModal: React.FC<UnassignedActivitiesModalProps>
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[88vh] border border-sky-100/80">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[94vh] sm:max-h-[88vh] border border-sky-100/80">
+        {/* Puxador Mobile */}
+        <div className="pt-2.5 pb-1 bg-slate-50/80 sm:hidden flex justify-center shrink-0" aria-hidden="true">
+          <div className="w-12 h-1.5 bg-slate-300 rounded-full" />
+        </div>
         {/* Header */}
-        <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+        <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">⚡</span>
             <div>
               <h2 className="text-base font-bold text-slate-900 leading-tight">
                 Atribuir Responsáveis Pendentes
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-600">
                 {unassignedEvents.length > 0
                   ? `Há ${unassignedEvents.length} atividade(s) aguardando definição de responsável`
                   : 'Todas as atividades estão com responsáveis definidos'}
@@ -86,8 +90,10 @@ export const UnassignedActivitiesModal: React.FC<UnassignedActivitiesModalProps>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200/50 transition-colors font-bold cursor-pointer"
+            aria-label="Fechar"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-200/50 transition-colors font-bold cursor-pointer"
           >
             ✕
           </button>

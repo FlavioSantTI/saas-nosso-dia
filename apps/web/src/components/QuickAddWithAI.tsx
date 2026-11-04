@@ -6,10 +6,18 @@ import {
   ExtractedRoutineData
 } from '../lib/gemini';
 import {
+  prepareAttachment,
+  PreparedAttachment,
+  ATTACHMENT_ACCEPT,
+  formatFileSize
+} from '../lib/documentExtract';
+import {
   Sparkles,
   Mic,
   MicOff,
   Camera,
+  Paperclip,
+  FileText,
   X,
   AlertCircle,
   Loader2
@@ -34,10 +42,10 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   const [isParsing, setIsParsing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Foto do Bilhete / Calendário
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [imageMimeType, setImageMimeType] = useState<string | null>(null);
+  // Anexo: foto do bilhete, PDF, DOC, DOCX, TXT ou MD
+  const [attachment, setAttachment] = useState<PreparedAttachment | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Ditado por Voz (Web Speech API)
@@ -95,33 +103,32 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
     }
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const resetInputs = () => {
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 8 * 1024 * 1024) {
-      alert('A imagem é muito grande. Escolha uma foto de até 8MB.');
-      return;
+    setErrorMessage(null);
+    setIsReadingFile(true);
+    try {
+      const prepared = await prepareAttachment(file);
+      setAttachment(prepared);
+    } catch (err: any) {
+      setAttachment(null);
+      setErrorMessage(err?.message || 'Não foi possível ler o arquivo.');
+    } finally {
+      setIsReadingFile(false);
+      resetInputs();
     }
-
-    setImageMimeType(file.type || 'image/jpeg');
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      setImagePreview(result);
-      const base64Data = result.split(',')[1];
-      setImageBase64(base64Data);
-    };
-    reader.readAsDataURL(file);
   };
 
-  const handleRemoveImage = () => {
-    setImagePreview(null);
-    setImageBase64(null);
-    setImageMimeType(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  const handleRemoveAttachment = () => {
+    setAttachment(null);
+    resetInputs();
   };
 
   const handleExtractWithGemini = async () => {
@@ -135,8 +142,8 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
       return;
     }
 
-    if (!inputText.trim() && !imageBase64) {
-      setErrorMessage('Digite uma mensagem, grave um áudio ou anexe uma foto de bilhete.');
+    if (!inputText.trim() && !attachment) {
+      setErrorMessage('Digite uma mensagem, grave um áudio ou anexe uma foto ou documento.');
       return;
     }
 
@@ -144,14 +151,14 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
       setIsParsing(true);
       const data = await extractRoutineWithGemini(
         inputText,
-        imageBase64,
-        imageMimeType,
-        members
+        attachment?.base64 ?? null,
+        attachment?.mimeType ?? null,
+        members,
+        attachment?.text ?? null,
+        attachment?.fileName ?? null
       );
       setInputText('');
-      setImagePreview(null);
-      setImageBase64(null);
-      setImageMimeType(null);
+      setAttachment(null);
       onConfirmAdd(data);
       onClose();
     } catch (err: any) {
@@ -163,48 +170,52 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-fade-in">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6">
+        <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-3 sm:hidden" aria-hidden="true" />
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div className="p-2 bg-amber-50 text-[#EA580C] rounded-xl border border-amber-200">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">Captura Inteligente com IA</h2>
-              <p className="text-[11px] text-slate-500 font-medium">Google Gemini 2.0 / 2.5 Flash Multimodal</p>
+              <p className="text-[11px] text-slate-600 font-medium">Google Gemini 2.0 / 2.5 Flash Multimodal</p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 font-bold text-lg p-1.5 cursor-pointer"
+            aria-label="Fechar"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 font-bold text-lg p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
           >
             ✕
           </button>
         </div>
 
-        <p className="text-xs text-slate-500 mb-3 leading-relaxed">
-          Cole a mensagem do WhatsApp, fale pelo microfone ou anexe a foto do bilhete escolar. A IA identificará o horário, o filho e o responsável.
-        </p>
+        <label htmlFor="quick-add-ai-input" className="block text-xs text-slate-600 mb-3 leading-relaxed">
+          Cole a mensagem do WhatsApp, fale pelo microfone, tire uma foto do bilhete ou anexe um documento (PDF, DOC, DOCX, TXT, MD). A IA identificará o horário, o filho e o responsável.
+        </label>
 
         <div className="relative">
           <textarea
-            rows={3}
+            id="quick-add-ai-input"
+            rows={4}
             maxLength={1500}
             value={inputText}
             onChange={(e) => setInputText(e.target.value.slice(0, 1500))}
             placeholder="Ex: Rafael tem natação terça e quinta às 18h no clube, eu levo"
-            className="w-full text-sm p-3.5 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:outline-hidden pr-20 bg-slate-50/50"
+            className="w-full text-base sm:text-sm p-3.5 pb-14 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:outline-hidden bg-slate-50/50"
           />
 
-          <div className="absolute right-2.5 bottom-3.5 flex items-center gap-1">
+          <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
             <button
               type="button"
               onClick={toggleListening}
               title={isListening ? 'Parar gravação' : 'Ditar por voz (Microfone)'}
-              className={`p-2 rounded-xl transition-all cursor-pointer ${
+              aria-label={isListening ? 'Parar gravação' : 'Ditar por voz'}
+              className={`min-w-[42px] min-h-[42px] flex items-center justify-center p-2 rounded-xl transition-all cursor-pointer ${
                 isListening
                   ? 'bg-rose-500 text-white animate-pulse shadow-md'
                   : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
@@ -215,48 +226,82 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
 
             <input
               type="file"
-              ref={fileInputRef}
+              ref={cameraInputRef}
               accept="image/*"
               capture="environment"
-              onChange={handleImageSelect}
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={isReadingFile}
+              title="Tirar foto do bilhete escolar"
+              aria-label="Tirar foto do bilhete escolar"
+              className="min-w-[42px] min-h-[42px] flex items-center justify-center p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept={ATTACHMENT_ACCEPT}
+              onChange={handleFileSelect}
               className="hidden"
             />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              title="Tirar foto do bilhete escolar"
-              className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer"
+              disabled={isReadingFile}
+              title="Anexar arquivo (foto, PDF, DOC, DOCX, TXT, MD)"
+              aria-label="Anexar arquivo"
+              className="min-w-[42px] min-h-[42px] flex items-center justify-center p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Camera className="w-4 h-4" />
+              {isReadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
-        {imagePreview && (
+        {attachment && (
           <div className="mt-2.5 p-2 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <img
-                src={imagePreview}
-                alt="Foto do bilhete"
-                className="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0"
-              />
+              {attachment.previewUrl ? (
+                <img
+                  src={attachment.previewUrl}
+                  alt="Foto do bilhete"
+                  className="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 flex flex-col items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
+                  <span className="text-[9px] font-bold uppercase">
+                    {attachment.fileName.split('.').pop()?.slice(0, 4)}
+                  </span>
+                </div>
+              )}
               <div className="min-w-0 text-xs">
-                <p className="font-bold text-slate-800 truncate">Foto do bilhete anexada</p>
-                <p className="text-[11px] text-slate-400">A IA lerá o texto da foto</p>
+                <p className="font-bold text-slate-800 truncate">
+                  {attachment.kind === 'image' ? 'Foto anexada' : attachment.fileName}
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  {formatFileSize(attachment.sizeBytes)} · A IA lerá o conteúdo
+                </p>
               </div>
             </div>
             <button
               type="button"
-              onClick={handleRemoveImage}
-              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
-              title="Remover foto"
+              onClick={handleRemoveAttachment}
+              className="min-w-[42px] min-h-[42px] flex items-center justify-center p-1.5 text-slate-500 hover:text-rose-600 rounded-lg cursor-pointer"
+              title="Remover anexo"
+              aria-label="Remover anexo"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        <div className="flex justify-between items-center text-[11px] text-slate-400 mt-1 px-1">
+        <div className="flex justify-between items-center text-[11px] text-slate-600 mt-1.5 px-1">
           <span>{isListening ? '🎙️ Ouvindo... Fale agora.' : 'Dica: Mencione quem leva e o horário'}</span>
           <span>{inputText.length}/1500 caracteres</span>
         </div>
@@ -271,8 +316,8 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
         <button
           type="button"
           onClick={handleExtractWithGemini}
-          disabled={isParsing || (!inputText.trim() && !imageBase64)}
-          className="w-full mt-3 py-3 bg-[#0284C7] hover:bg-sky-700 text-white font-bold rounded-2xl text-xs transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+          disabled={isParsing || isReadingFile || (!inputText.trim() && !attachment)}
+          className="w-full min-h-[48px] mt-3 py-3 bg-[#0284C7] hover:bg-sky-700 text-white font-bold rounded-2xl text-sm transition-colors shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
         >
           {isParsing ? (
             <>

@@ -49,6 +49,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
   familyId,
   responsibleFilterId,
   refreshTrigger,
+  events,
   onEventsChanged,
   onNotify,
   onOpenSearch
@@ -86,48 +87,75 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
       setIsLoading(true);
       setErrorMsg(null);
 
-      const { data: rawEvents, error: queryError } = await supabase
-        .from('events')
-        .select(`
-          id,
-          family_id,
-          routine_id,
-          title,
-          start_time,
-          end_time,
-          is_all_day,
-          status,
-          location_id,
-          responsible_id,
-          locations ( id, name, address ),
-          responsible:family_members!events_responsible_id_fkey ( id, name, nickname, color, role ),
-          event_participants (
-            member_id,
-            family_members ( id, name, nickname, color, role )
-          )
-        `)
-        .eq('family_id', familyId);
+      let cleanEvents: any[] = [];
 
-      if (queryError) throw queryError;
+      // Otimização de Performance: Se os eventos já estiverem disponíveis em memória (via props),
+      // deriva os itens do dia sem fazer nenhuma requisição de rede ao Supabase.
+      if (events && Array.isArray(events) && events.length > 0) {
+        const dayEvents = events.filter(
+          (e: Record<string, any>) => extractLiteralDate(e.start_time) === selectedDate
+        );
+        cleanEvents = deduplicateAndCleanEvents(dayEvents);
+      } else {
+        // Fallback: se os eventos ainda não foram carregados, busca no Supabase filtrando estritamente pela data selecionada
+        const { data: rawEvents, error: queryError } = await supabase
+          .from('events')
+          .select(`
+            id,
+            family_id,
+            routine_id,
+            title,
+            start_time,
+            end_time,
+            is_all_day,
+            status,
+            location_id,
+            responsible_id,
+            locations ( id, name, address ),
+            responsible:family_members!events_responsible_id_fkey ( id, name, nickname, color, role ),
+            event_participants (
+              member_id,
+              family_members ( id, name, nickname, color, role )
+            )
+          `)
+          .eq('family_id', familyId)
+          .gte('start_time', `${selectedDate}T00:00:00`)
+          .lte('start_time', `${selectedDate}T23:59:59`);
 
-      const dayEvents = (rawEvents || []).filter(
-        (e: Record<string, any>) => extractLiteralDate(e.start_time) === selectedDate
-      );
+        if (queryError) throw queryError;
 
-      const cleanEvents = deduplicateAndCleanEvents(dayEvents);
+        const dayEvents = (rawEvents || []).filter(
+          (e: Record<string, any>) => extractLiteralDate(e.start_time) === selectedDate
+        );
+
+        cleanEvents = deduplicateAndCleanEvents(dayEvents);
+      }
 
       const mapped: DailyBriefingItem[] = cleanEvents.map((e: Record<string, any>) => {
-        const loc = Array.isArray(e.locations) ? e.locations[0] : e.locations;
-        const resp = Array.isArray(e.responsible) ? e.responsible[0] : e.responsible;
+        const loc = Array.isArray(e.locations) ? e.locations[0] : (e.location || e.locations);
+        const resp = Array.isArray(e.responsible) ? e.responsible[0] : (e.responsible || null);
         const startLocal = extractLiteralTime(e.start_time);
         const endLocal = extractLiteralTime(e.end_time);
 
-        const participants = (e.participants || []).map((p: Record<string, any>) => ({
-          id: String(p.id),
-          name: String(p.nickname || p.name),
-          color: String(p.color || '#0284C7'),
-          role: p.role
-        }));
+        let participants: any[] = [];
+        if (Array.isArray(e.participants)) {
+          participants = e.participants.map((p: Record<string, any>) => ({
+            id: String(p.id),
+            name: String(p.nickname || p.name),
+            color: String(p.color || '#0284C7'),
+            role: p.role
+          }));
+        } else if (Array.isArray(e.event_participants)) {
+          participants = e.event_participants.map((ep: Record<string, any>) => {
+            const m = ep.family_members || ep.member || ep;
+            return {
+              id: String(m.id || ep.member_id),
+              name: String(m.nickname || m.name || 'Membro'),
+              color: String(m.color || '#0284C7'),
+              role: m.role
+            };
+          });
+        }
 
         return {
           event_id: String(e.id),
@@ -141,7 +169,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
           location_name: loc?.name || null,
           location_address: loc?.address || null,
           responsible_id: e.responsible_id || null,
-          responsible_name: resp ? resp.nickname || resp.name : null,
+          responsible_name: resp ? (resp.nickname || resp.name) : null,
           responsible_color: resp?.color || null,
           participants,
           has_conflict: false
@@ -187,7 +215,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
 
   useEffect(() => {
     loadBriefing();
-  }, [familyId, selectedDate, responsibleFilterId, refreshTrigger]);
+  }, [familyId, selectedDate, responsibleFilterId, refreshTrigger, events]);
 
   const activeItems = items.filter((item) => item.status !== 'CANCELLED');
   const unassignedCount = activeItems.filter((item) => !item.responsible_id).length;
@@ -312,16 +340,18 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             <button
               type="button"
               onClick={() => setSelectedDate((prev) => shiftDateString(prev, -1))}
-              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
+              className="w-9 h-9 flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
               title="Dia anterior"
+              aria-label="Dia anterior"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => setSelectedDate((prev) => shiftDateString(prev, 1))}
-              className="p-1 text-slate-600 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
+              className="w-9 h-9 flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
               title="Próximo dia"
+              aria-label="Próximo dia"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -337,9 +367,10 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                 }
               }}
               className="sr-only"
+              aria-label="Escolher data específica"
             />
             <span
-              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+              className="min-h-[38px] px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
               title="Escolher data específica"
             >
               <Calendar className="w-3.5 h-3.5" />
@@ -347,12 +378,12 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             </span>
           </label>
 
-          {/* Botão Buscar Atividades */}
-          {onOpenSearch && (
+          {/* Botão Buscar Atividades (Exibido apenas quando recolhido para evitar duplicidade com a barra larga abaixo) */}
+          {onOpenSearch && isCollapsed && (
             <button
               type="button"
               onClick={onOpenSearch}
-              className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-xl text-xs font-semibold border border-sky-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              className="min-h-[38px] px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-xl text-xs font-semibold border border-sky-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
               title="Buscar atividades por palavra-chave (Ctrl+K)"
             >
               <Search className="w-3.5 h-3.5 text-sky-600" />
@@ -364,7 +395,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
           <button
             type="button"
             onClick={toggleCollapse}
-            className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 rounded-xl text-xs font-semibold border border-slate-200 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+            className="min-h-[38px] px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-semibold border border-slate-200 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
             title={isCollapsed ? 'Expandir card' : 'Recolher card'}
           >
             {isCollapsed ? (
@@ -389,20 +420,20 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             <button
               type="button"
               onClick={onOpenSearch}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50/90 hover:bg-white text-slate-500 hover:text-slate-800 rounded-2xl border border-slate-200 hover:border-sky-300 transition-all text-xs font-medium shadow-2xs group mb-3 cursor-pointer"
+              className="w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 bg-slate-50/90 hover:bg-white text-slate-600 hover:text-slate-900 rounded-2xl border border-slate-200 hover:border-sky-300 transition-all text-xs font-medium shadow-2xs group mb-3 cursor-pointer"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <Search className="w-4 h-4 text-slate-400 group-hover:text-sky-600 transition-colors shrink-0" />
+                <Search className="w-4 h-4 text-slate-500 group-hover:text-sky-600 transition-colors shrink-0" />
                 <span className="truncate">Buscar atividade por título ou aniversários (ex: Voleibol, Unimed, Terapia)...</span>
               </div>
-              <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-white border border-slate-200 rounded-lg shadow-2xs shrink-0">
+              <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-lg shadow-2xs shrink-0">
                 Ctrl + K
               </kbd>
             </button>
           )}
 
           {/* Mini-Balanço / Métricas Rápidas do Dia */}
-      <div className="flex items-center justify-between flex-wrap gap-2 text-xs text-slate-500 mb-4 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
+      <div className="flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600 mb-4 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
         <div className="flex items-center gap-3 flex-wrap">
           <span>
             📋 <strong>{activeItems.length}</strong> atividade(s)
@@ -423,7 +454,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
           <button
             type="button"
             onClick={handleCopyWhatsAppReport}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:text-sky-800 transition-colors ml-auto"
+            className="min-h-[36px] px-2 py-1 inline-flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:text-sky-800 transition-colors ml-auto cursor-pointer"
           >
             {copiedWhatsApp ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
             <span>{copiedWhatsApp ? 'Copiado para o WhatsApp!' : 'Copiar para WhatsApp'}</span>
@@ -443,7 +474,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
           {errorMsg}
         </div>
       ) : items.length === 0 ? (
-        <div className="py-8 text-center text-xs text-slate-400 font-medium">
+        <div className="py-8 text-center text-xs text-slate-500 font-medium">
           Nenhum compromisso agendado para esta data. Família livre! 🎉
         </div>
       ) : (
@@ -468,8 +499,8 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                   <span
                     className={`font-bold border px-2.5 py-1 rounded-xl text-xs shrink-0 ${
                       isCancelled
-                        ? 'bg-slate-200 text-slate-500 border-slate-300 line-through'
-                        : 'bg-sky-50 text-sky-700 border-sky-100'
+                        ? 'bg-slate-200 text-slate-600 border-slate-300 line-through'
+                        : 'bg-sky-50 text-sky-800 border-sky-100'
                     }`}
                   >
                     {item.is_all_day ? 'Dia Todo' : `${item.start_time_local} - ${item.end_time_local}`}
@@ -479,7 +510,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className={`font-bold text-sm ${
-                          isCancelled ? 'line-through text-slate-400' : 'text-slate-900'
+                          isCancelled ? 'line-through text-slate-500' : 'text-slate-900'
                         }`}
                       >
                         {item.title}
@@ -487,13 +518,13 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
 
                       {item.location_name && (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                          <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
                           {item.location_name}
                         </span>
                       )}
 
                       {isCancelled && (
-                        <span className="text-[10px] font-bold text-slate-500 bg-slate-200/80 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-bold text-slate-600 bg-slate-200/80 px-1.5 py-0.5 rounded">
                           Cancelado nesta data
                         </span>
                       )}
@@ -501,7 +532,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
 
                     {item.participants.length > 0 && !isCancelled && (
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                        <span className="text-[11px] text-slate-400 font-medium">Participante(s):</span>
+                        <span className="text-[11px] text-slate-600 font-medium">Participante(s):</span>
                         {item.participants.map((p) => (
                           <span
                             key={p.id}
@@ -516,10 +547,10 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                   </div>
                 </div>
 
-                <div className="text-xs flex items-center sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
+                <div className="text-xs flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
                   <div className="flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="text-slate-500">Responsável:</span>
+                    <User className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="text-slate-600">Responsável:</span>
                     {item.responsible_name ? (
                       <strong className="text-slate-800">{item.responsible_name}</strong>
                     ) : (
@@ -530,7 +561,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                   </div>
 
                   {/* Ações Rápidas no Card */}
-                  <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+                  <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
                     {!isCancelled ? (
                       <>
                         <button
@@ -549,26 +580,28 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                             })
                           }
                           title="Alarme no celular (.ics)"
-                          className="p-1 text-slate-400 hover:text-sky-600 rounded-md transition-colors"
+                          aria-label="Alarme no celular (.ics)"
+                          className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors cursor-pointer"
                         >
-                          <BellRing className="w-3.5 h-3.5" />
+                          <BellRing className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleItemCancel(item.event_id)}
                           title="Cancelar nesta data"
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition-colors"
+                          aria-label="Cancelar nesta data"
+                          className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                         >
-                          <CalendarX className="w-3.5 h-3.5" />
+                          <CalendarX className="w-4 h-4" />
                         </button>
                       </>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleItemReactivate(item.event_id)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-md transition-colors"
+                        className="min-h-[36px] inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-lg transition-colors cursor-pointer"
                       >
-                        <Undo2 className="w-3 h-3" />
+                        <Undo2 className="w-3.5 h-3.5" />
                         Reativar
                       </button>
                     )}

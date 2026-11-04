@@ -340,13 +340,14 @@ export const CalendarSearchModal: React.FC<CalendarSearchModalProps> = ({
           <input
             ref={inputRef}
             type="text"
+            aria-label="Buscar atividade por título"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
               executeSearch(e.target.value);
             }}
             placeholder="Buscar atividade por título (ex: Voleibol, Unimed, Aniversário)..."
-            className="w-full pl-10 pr-10 py-2.5 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-hidden"
+            className="w-full pl-10 pr-10 py-2.5 text-base sm:text-sm font-medium text-slate-900 placeholder-slate-500 focus:outline-hidden"
           />
           {searchTerm && (
             <button

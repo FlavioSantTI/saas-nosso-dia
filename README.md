@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v2.1.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v2.2.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -205,6 +205,27 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v2.2.0] — 2026-11-04
+#### ⚡ Otimização de Performance na Inicialização (Supabase) & Refinamento UI/UX Mobile-First
+- **Otimização Crítica de Carga Inicial no Supabase (`App.tsx` e `DailyBriefingCard.tsx`):**
+  - **Paralelização Unificada (`Promise.all`):** A resolução de `families`, `subscriptions` (com `plans`), `family_members`, `locations`, `events` e `routines` agora ocorre em um único lote concorrente após identificar o `family_id`, eliminando a cascata sequencial de requisições que atrasava a abertura do app.
+  - **Cache Reativo em Memória (`familyRef`):** A família e sua assinatura são preservadas em memória entre navegações de datas e trocas de visão (Dia/Semana/Mês), evitando reconsultas repetitivas ao banco em cada clique.
+  - **Sincronização de Rotinas em Memória (`ensureRoutineEvents`):** Compara as rotinas ativas diretamente com os eventos já carregados na memória da janela visível (0 requisições extras de rede quando já materializadas).
+  - **Bloqueio de Duplicidade no Boot (`isLoadingDataRef`):** Impede disparos concorrentes duplicados entre o `useEffect` de montagem e o evento `SIGNED_IN` do `onAuthStateChange`.
+  - **Eliminação de Full Table Scan no Resumo Diário (`DailyBriefingCard.tsx`):** O card de briefing passa a derivar os eventos diretamente da prop `events` já carregada em memória; em caso de fallback remoto, aplica filtro estrito de data (`.gte` / `.lte`).
+- **Modais no Padrão Bottom Sheet Mobile & Prevenção de Auto-Zoom no iOS:**
+  - **Bottom Sheet Nativo:** `AuthModal`, `AddManualActivityModal`, `EditActivityModal`, `QuickAddWithAI`, `FamilyManageModal` e `UnassignedActivitiesModal` adaptados com ancoragem inferior (`items-end sm:items-center`), cantos arredondados superiores (`rounded-t-3xl sm:rounded-3xl`) e pílula visual de arraste (*drag handle*) no mobile.
+  - **Inputs em 16px (`text-base sm:text-sm`):** Aplicado em todos os campos de texto, seletores e textareas para impedir o zoom automático forçado pelo Safari no iOS ao focar em formulários.
+  - **Alternador de Senha (`Eye` / `EyeOff`):** Adicionado botão acessível de visualização de senha no `AuthModal.tsx` e associação semântica `htmlFor`/`id` em formulários.
+- **Correções de Overflow Horizontal e Alvos de Toque WCAG 2.2 AA (44x44px):**
+  - **Gestão da Família (`FamilyManageModal.tsx`):** Empilhamento responsivo (`flex-col sm:flex-row`) nas seções *"Nome da Família"* e *"Convidar Cônjuge/Responsável"*, impedindo que o botão *"Copiar Link de Convite"* vaze da tela em smartphones.
+  - **Landing Page (`LandingPage.tsx`):** Ajustes responsivos em telas `< 430px` (`text-3xl sm:text-4xl`, `overflow-x-hidden` e empilhamento na maquete semanal).
+  - **Fita de Dias Mobile (`WeekView.tsx`):** Seletor horizontal de 7 dias com foco no dia selecionado no mobile e grade de 7 colunas preservada no desktop (`lg:grid-cols-7`).
+  - **Alvos de Toque (44x44px):** Botões de navegação temporal (`CalendarNavigation.tsx`), ícones do cabeçalho (`Header.tsx`) e seletores de dias da semana ampliados para `w-11 h-11` (`min-h-[44px]`).
+- **Arquitetura Mobile-First App Shell (`App.tsx`, `BottomNavBar.tsx` e `BalanceView.tsx`):**
+  - Layout App Shell (`h-[100dvh] overflow-hidden`) com barra inferior ergonômica na zona do polegar (*Agenda*, *Meu Dia*, *Novo (+)*, *Balanço* e *Família*) e banner de atualização PWA reposicionado (`bottom-20 sm:bottom-6`) sem sobrepor a navegação.
+  - Criação dos documentos [`PRODUCT.md`](PRODUCT.md), [`DESIGN.md`](DESIGN.md) e [`docs/UI-UX-AUDIT.md`](docs/UI-UX-AUDIT.md).
 
 ### [v2.1.0] — 2026-10-14
 #### 🔍 Busca Rápida de Atividades & Resumo Familiar Retrátil

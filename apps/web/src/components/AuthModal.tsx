@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Family, FamilyMember } from '../types';
-import { Mail, Lock, User as UserIcon, X, AlertCircle, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, X, AlertCircle, CheckCircle2, Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -29,6 +29,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [activeTab, setActiveTab] = useState<'login' | 'register'>(initialTab);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
 
@@ -234,11 +235,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     <div
       className={
         isStandalone
-          ? 'min-h-screen bg-linear-to-b from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center p-4 sm:p-6 font-sans animate-in fade-in duration-200'
-          : 'fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150'
+          ? 'min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center p-4 sm:p-6 font-sans animate-in fade-in duration-200'
+          : 'fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150'
       }
     >
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-sky-100 flex flex-col">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-sky-100 flex flex-col max-h-[95vh] overflow-y-auto">
+        {!isStandalone && (
+          <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-3 sm:hidden shrink-0" aria-hidden="true" />
+        )}
         {/* Header do Modal / Standalone */}
         {isStandalone ? (
           <div className="text-center mb-5">
@@ -250,7 +254,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               {activeTab === 'login' ? 'Acessar Nosso Dia' : 'Criar Conta Familiar'}
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-600 mt-1">
               {activeTab === 'login'
                 ? 'Entre com seu e-mail e senha cadastrados'
                 : 'Cadastre-se para gerenciar a rotina familiar'}
@@ -259,14 +263,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         ) : (
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-sky-100 flex items-center justify-center text-sky-700 font-bold text-sm">
+              <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center text-sky-700 font-bold text-sm">
                 🔐
               </div>
               <div>
                 <h2 className="text-base font-bold text-slate-900 leading-tight">
                   {activeTab === 'login' ? 'Acessar Nosso Dia' : 'Criar Conta Familiar'}
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600">
                   {activeTab === 'login'
                     ? 'Entre com suas credenciais do Supabase'
                     : 'Cadastre-se para gerenciar a rotina familiar'}
@@ -274,10 +278,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              aria-label="Fechar"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 font-bold p-1 rounded-xl hover:bg-slate-100 cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         )}
@@ -306,10 +312,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               setActiveTab('login');
               setError(null);
             }}
-            className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+            className={`min-h-[40px] py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               activeTab === 'login'
                 ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Entrar
@@ -320,10 +326,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               setActiveTab('register');
               setError(null);
             }}
-            className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+            className={`min-h-[40px] py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               activeTab === 'register'
                 ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Criar Conta
@@ -349,18 +355,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {activeTab === 'register' && (
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label htmlFor="auth-full-name" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Seu Nome Completo
               </label>
               <div className="relative">
-                <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                <UserIcon className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5 sm:top-3 pointer-events-none" />
                 <input
+                  id="auth-full-name"
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: Flávio Santiago"
-                  className="w-full text-xs font-medium pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
+                  className="w-full text-base sm:text-sm font-medium pl-10 pr-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
                 />
               </div>
             </div>
@@ -369,13 +376,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {/* Seleção de membro da família (quando houver membros pré-cadastrados sem vínculo) */}
           {unlinkedAdultMembers.length > 0 && (
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label htmlFor="auth-member-select" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Quem é você na família? (Opcional)
               </label>
               <select
+                id="auth-member-select"
                 value={selectedMemberId}
                 onChange={(e) => setSelectedMemberId(e.target.value)}
-                className="w-full text-xs font-medium px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-slate-800 cursor-pointer"
+                className="w-full text-base sm:text-sm font-medium px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-slate-800 cursor-pointer"
               >
                 <option value="">+ Vincular automaticamente pelo meu nome</option>
                 {unlinkedAdultMembers.map((m) => (
@@ -388,44 +396,55 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label htmlFor="auth-email" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
               E-mail
             </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+              <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5 sm:top-3 pointer-events-none" />
               <input
+                id="auth-email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seuemail@exemplo.com"
-                className="w-full text-xs font-medium pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
+                className="w-full text-base sm:text-sm font-medium pl-10 pr-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label htmlFor="auth-password" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
               Senha
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5 sm:top-3 pointer-events-none" />
               <input
-                type="password"
+                id="auth-password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Mínimo 6 caracteres"
-                className="w-full text-xs font-medium pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
+                className="w-full text-base sm:text-sm font-medium pl-10 pr-11 py-2.5 bg-slate-50 rounded-xl border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-colors cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-3 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full min-h-[48px] mt-2 py-3 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading ? (
               <>

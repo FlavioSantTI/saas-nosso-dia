@@ -9,8 +9,6 @@ import {
   LogIn,
   LogOut,
   ChevronDown,
-  Sun,
-  MoreVertical,
   ShieldCheck,
   Loader2,
   RefreshCw,
@@ -60,10 +58,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [logoError, setLogoError] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   const [showPlanModal, setShowPlanModal] = useState(false);
 
@@ -91,9 +87,6 @@ export const Header: React.FC<HeaderProps> = ({
       const target = event.target as Node;
       if (userMenuRef.current && !userMenuRef.current.contains(target)) {
         setIsUserMenuOpen(false);
-      }
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(target)) {
-        setIsMobileMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -177,339 +170,142 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Lado Direito: VERSÃO DESKTOP (sm: e superior) */}
-        <div className="hidden sm:flex items-center space-x-2 sm:space-x-2.5">
-          {/* Botão Gerenciar Família */}
-          <button
-            onClick={onOpenManageFamily}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 transition-all shadow-2xs cursor-pointer"
-            title="Gerenciar Família e Membros"
-          >
-            <Users className="w-3.5 h-3.5 text-slate-500" />
-            <span>Família</span>
-          </button>
-
-          {/* Botão Captura com IA */}
-          <button
-            onClick={onOpenQuickAdd}
-            className={`relative inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs group cursor-pointer ${
-              hasActiveAlert
-                ? 'bg-amber-100 text-amber-950 border border-amber-300 ring-4 ring-amber-200/50 scale-105'
-                : 'bg-amber-100/90 text-amber-950 hover:bg-amber-200/90 border border-amber-200/80'
-            }`}
-          >
-            <Bot className="w-4 h-4 text-amber-800 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
-            <span>Captura com IA</span>
-            {/* Radar Ativo */}
-            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#059669]"></span>
-            </span>
-          </button>
-
-          {/* Botão Nova Atividade */}
-          <button
-            onClick={onOpenNewActivity}
-            className="inline-flex items-center gap-1 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-xs transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nova Atividade</span>
-          </button>
-
-          {/* Alternador de Visão no Header: Botão estilizado e discreto [ 🛡️ Painel Admin ] */}
-          {isSuperAdmin && onOpenAdmin && (
+        {/* Lado Direito do Header: Limpo, Arejado e sem sobrecarga */}
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Botão de Busca Rápida (Sempre Visível, Limpo e Acessível) */}
+          {onOpenSearch && (
             <button
               type="button"
-              onClick={onOpenAdmin}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50/90 hover:bg-indigo-100 border border-indigo-200/90 shadow-2xs transition-all cursor-pointer group"
-              title="Alternar para o Painel Super-Admin"
+              onClick={onOpenSearch}
+              className="w-11 h-11 flex items-center justify-center rounded-xl bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 hover:text-sky-800 transition-colors shadow-2xs cursor-pointer"
+              title="Buscar Atividades (Ctrl+K)"
+              aria-label="Buscar Atividades"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 transition-transform group-hover:scale-110" />
-              <span>🛡️ Painel Admin</span>
+              <Search className="w-4 h-4 text-slate-600" />
             </button>
           )}
 
-          {/* Seção de Autenticação / Perfil de Usuário com Botão de Sair */}
+          {/* No Desktop: Botão de Criação Rápida */}
+          <div className="hidden sm:flex items-center space-x-2">
+            <button
+              onClick={onOpenQuickAdd}
+              className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                hasActiveAlert
+                  ? 'bg-amber-100 text-amber-950 border border-amber-300 ring-2 ring-amber-200/50'
+                  : 'bg-amber-100/90 text-amber-950 hover:bg-amber-200/90 border border-amber-200/80'
+              }`}
+              title="Captura com IA"
+            >
+              <Bot className="w-4 h-4 text-amber-800" />
+              <span>IA</span>
+            </button>
+            <button
+              onClick={onOpenNewActivity}
+              className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-xs transition-all cursor-pointer"
+              title="Nova Atividade"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nova</span>
+            </button>
+          </div>
+
+          {/* Menu de Perfil / Conta (Mobile & Desktop) */}
           {hasActiveSession ? (
-            <div className="flex items-center gap-1.5 ml-1">
-              {/* Menu com Nome e Avatar */}
-              <div className="relative" ref={userMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-1.5 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
-                  title="Opções da Conta"
-                >
-                  <div
-                    className="w-6 h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-xs"
-                    style={{ backgroundColor: memberColor }}
-                  >
-                    {firstName.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="text-xs font-bold text-slate-800 hidden sm:inline max-w-[100px] truncate">
-                    {firstName}
-                  </span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-
-                {/* Dropdown do Usuário Desktop */}
-                {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-                    <div className="p-2.5 border-b border-slate-100">
-                      <p className="text-xs font-bold text-slate-900 truncate">
-                        {rawDisplayName}
-                      </p>
-                      {currentUser?.email ? (
-                        <p className="text-[11px] text-slate-500 truncate">
-                          {currentUser.email}
-                        </p>
-                      ) : (
-                        <p className="text-[11px] text-slate-500 truncate">
-                          {family.name}
-                        </p>
-                      )}
-                      {currentMember && (
-                        <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100">
-                          {currentMember.role === 'ADMIN'
-                            ? 'Adulto (Admin)'
-                            : 'Adulto (Membro)'}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="py-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsUserMenuOpen(false);
-                          onOpenSummary('today');
-                        }}
-                        className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2 cursor-pointer"
-                      >
-                        <Sun className="w-4 h-4 text-amber-500" />
-                        <span>Meu Dia Hoje</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsUserMenuOpen(false);
-                          onOpenSummary('week');
-                        }}
-                        className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2 cursor-pointer"
-                      >
-                        <BarChart3 className="w-4 h-4 text-sky-600" />
-                        <span>Balanço da Semana</span>
-                      </button>
-                    </div>
-
-                    {isSuperAdmin && onOpenAdmin && (
-                      <div className="py-1 border-t border-slate-100">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsUserMenuOpen(false);
-                            onOpenAdmin();
-                          }}
-                          className="w-full px-3 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
-                        >
-                          <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                          <span>Painel Super-Admin</span>
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="pt-1 border-t border-slate-100">
-                      <button
-                        type="button"
-                        disabled={isLoggingOut}
-                        onClick={async () => {
-                          setIsUserMenuOpen(false);
-                          await handleLogoutClick();
-                        }}
-                        className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
-                      >
-                        {isLoggingOut ? (
-                          <Loader2 className="w-4 h-4 text-rose-600 animate-spin" />
-                        ) : (
-                          <LogOut className="w-4 h-4" />
-                        )}
-                        <span>{isLoggingOut ? 'Saindo...' : 'Sair da Conta'}</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Botão de Ação Direta: [ 🚪 Sair ] */}
+            <div className="relative" ref={userMenuRef}>
               <button
                 type="button"
-                disabled={isLoggingOut}
-                onClick={handleLogoutClick}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100/80 border border-rose-200/70 transition-all shadow-2xs cursor-pointer disabled:opacity-60"
-                title="Sair da Conta e Família"
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
+                title="Opções da Conta e Família"
+                aria-label="Opções da Conta"
               >
-                {isLoggingOut ? (
-                  <Loader2 className="w-3.5 h-3.5 text-rose-600 animate-spin" />
-                ) : (
-                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
-                )}
-                <span className="hidden md:inline">{isLoggingOut ? 'Saindo...' : 'Sair'}</span>
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={onOpenAuth}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer shadow-2xs ml-1"
-              title="Entrar ou Criar Conta"
-            >
-              <LogIn className="w-3.5 h-3.5 text-slate-600" />
-              <span>Entrar</span>
-            </button>
-          )}
-        </div>
-
-        {/* Lado Direito: VERSÃO MOBILE (< 640px / smartphone) */}
-        <div className="flex sm:hidden items-center space-x-1.5">
-          {/* Botão Prioritário Compacto: 🤖 IA */}
-          <button
-            onClick={onOpenQuickAdd}
-            className={`relative inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
-              hasActiveAlert
-                ? 'bg-amber-100 text-amber-950 border border-amber-300 ring-2 ring-amber-200/50'
-                : 'bg-amber-100/90 text-amber-950 hover:bg-amber-200 border border-amber-200/80'
-            }`}
-            title="Captura Rápida com IA"
-          >
-            <Bot className="w-3.5 h-3.5 text-amber-800" />
-            <span>IA</span>
-            <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#059669]"></span>
-            </span>
-          </button>
-
-          {/* Botão Prioritário Compacto: + Nova */}
-          <button
-            onClick={onOpenNewActivity}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-xs transition-all cursor-pointer"
-            title="Nova Atividade"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Nova</span>
-          </button>
-
-          {/* Menu Suspenso Mobile (3 pontinhos '⋮') */}
-          <div className="relative" ref={mobileMenuRef}>
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white text-slate-700 transition-all shadow-2xs cursor-pointer flex items-center justify-center"
-              title="Mais Opções"
-              aria-label="Mais Opções"
-            >
-              <MoreVertical className="w-4 h-4 text-slate-600" />
-            </button>
-
-            {isMobileMenuOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-                {/* Se houver sessão ativa, exibe identificação limpa com primeiro nome */}
-                {hasActiveSession && (
-                  <div className="p-2 border-b border-slate-100 mb-1">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-5 h-5 rounded-md text-white font-bold text-[10px] flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: memberColor }}
-                      >
-                        {firstName.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 truncate">
-                          {firstName}
-                        </p>
-                        <p className="text-[10px] text-slate-500 truncate">
-                          {currentUser?.email || family.name}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-0.5">
-                  {onOpenSearch && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        onOpenSearch();
-                      }}
-                      className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-800 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <Search className="w-4 h-4 text-sky-600" />
-                      <span>Buscar Atividades</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      onOpenSummary('week');
-                    }}
-                    className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-sky-50 hover:text-sky-800 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    <BarChart3 className="w-4 h-4 text-sky-600" />
-                    <span>Balanço da Semana</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      onOpenSummary('today');
-                    }}
-                    className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-800 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    <Sun className="w-4 h-4 text-amber-500" />
-                    <span>Meu Dia Hoje</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      onOpenManageFamily();
-                    }}
-                    className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    <Users className="w-4 h-4 text-slate-500" />
-                    <span>Gerenciar Família</span>
-                  </button>
-
-                  {isSuperAdmin && onOpenAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        onOpenAdmin();
-                      }}
-                      className="w-full px-3 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                      <span>🛡️ Painel Admin</span>
-                    </button>
-                  )}
+                <div
+                  className="w-7 h-7 sm:w-6 sm:h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-xs"
+                  style={{ backgroundColor: memberColor }}
+                >
+                  {firstName.charAt(0).toUpperCase()}
                 </div>
+                <span className="text-xs font-bold text-slate-800 hidden sm:inline max-w-[100px] truncate">
+                  {firstName}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
+              </button>
 
-                <div className="pt-1 mt-1 border-t border-slate-100">
-                  {hasActiveSession ? (
+              {/* Dropdown do Usuário com Versão, Super-Admin e Créditos */}
+              {isUserMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="p-2.5 border-b border-slate-100">
+                    <p className="text-xs font-bold text-slate-900 truncate">
+                      {rawDisplayName}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {currentUser?.email || family.name}
+                    </p>
+                    {currentMember && (
+                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100">
+                        {currentMember.role === 'ADMIN' ? 'Administrador' : 'Membro'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="py-1 space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        onOpenManageFamily();
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2.5 cursor-pointer"
+                    >
+                      <Users className="w-4 h-4 text-slate-500" />
+                      <span>Gerenciar Família & Membros</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        onOpenSummary('week');
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2.5 cursor-pointer"
+                    >
+                      <BarChart3 className="w-4 h-4 text-slate-500" />
+                      <span>Resumo & Equilíbrio Semanal</span>
+                    </button>
+                    {isSuperAdmin && onOpenAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          onOpenAdmin();
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                        <span>🛡️ Painel Super-Admin (/admin)</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Informações Institucionais no Lugar Correto (Menu da Conta) */}
+                  <div className="p-2.5 border-t border-slate-100 bg-slate-50/70 rounded-xl my-1 text-[11px] text-slate-500">
+                    <div className="flex items-center justify-between font-bold text-slate-700">
+                      <span>Nosso Dia</span>
+                      <span className="text-[10px] bg-sky-100 text-sky-800 px-1.5 py-0.2 rounded font-extrabold">v{APP_VERSION}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1 leading-tight">
+                      Powered by <strong className="text-sky-700 font-semibold">Flavio Santiago Consultor IA</strong> — 2026
+                    </p>
+                  </div>
+
+                  <div className="pt-1 border-t border-slate-100">
                     <button
                       type="button"
                       disabled={isLoggingOut}
                       onClick={async () => {
-                        setIsMobileMenuOpen(false);
+                        setIsUserMenuOpen(false);
                         await handleLogoutClick();
                       }}
-                      className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer disabled:opacity-60"
+                      className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
                     >
                       {isLoggingOut ? (
                         <Loader2 className="w-4 h-4 text-rose-600 animate-spin" />
@@ -518,23 +314,20 @@ export const Header: React.FC<HeaderProps> = ({
                       )}
                       <span>{isLoggingOut ? 'Saindo...' : 'Sair da Conta'}</span>
                     </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        onOpenAuth();
-                      }}
-                      className="w-full px-3 py-2 text-left text-xs font-bold text-sky-700 hover:bg-sky-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <LogIn className="w-4 h-4 text-sky-600" />
-                      <span>Entrar / Cadastrar</span>
-                    </button>
-                  )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition-all cursor-pointer shadow-xs"
+              title="Entrar ou Criar Conta"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Entrar</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

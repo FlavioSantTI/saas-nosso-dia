@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Family, FamilyMember, EventItem, Location, MemberRole } from './types';
 import { Header } from './components/Header';
 import { WeekView } from './components/WeekView';
@@ -15,6 +15,8 @@ import { SummaryModal } from './components/SummaryModal';
 import { DailyBriefingCard } from './components/DailyBriefingCard';
 import { CalendarSearchModal } from './components/CalendarSearchModal';
 import { Toast, ToastItem, ToastType } from './components/Toast';
+import { BottomNavBar, BottomNavTab } from './components/BottomNavBar';
+import { BalanceView } from './components/BalanceView';
 import { Onboarding } from './components/Onboarding';
 import { supabase } from './lib/supabase';
 import { startNotificationScheduler, requestNotificationPermission } from './lib/notifications';
@@ -23,7 +25,6 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { LandingPage } from './components/LandingPage';
 import { sanitizeTitle } from './lib/sanitize';
 import { usePwaUpdate } from './lib/usePwaUpdate';
-import { APP_VERSION } from './constants/version';
 import {
   extractLiteralDate,
   extractLiteralTime,
@@ -131,11 +132,12 @@ const getWeekDateMap = (refDate: Date): Record<string, string> => {
   return map;
 };
 
-// Varredura ágil e sincronização de rotinas ativas para a janela visível (+ margem de 7 dias)
+// Varredura ágil e sincronização de rotinas ativas para a janela visível
 const ensureRoutineEvents = async (
   familyId: string,
   visibleRange: { start: string; end: string },
-  preloadedRoutines?: any[]
+  preloadedRoutines?: any[],
+  preloadedEvents?: any[]
 ): Promise<any[]> => {
   try {
     // 1. Reutiliza rotinas já carregadas na memória ou busca ativas da família
@@ -163,22 +165,24 @@ const ensureRoutineEvents = async (
 
     const startDate = parseSafeLocalDate(visStartStr < todayStr ? visStartStr : todayStr);
     const endDate = parseSafeLocalDate(visEndStr);
-    endDate.setDate(endDate.getDate() + 7);
 
-    const scanStartStr = toLocalDateString(startDate);
-    const scanEndStr = toLocalDateString(endDate);
-
-    // 3. Busca eventos existentes no intervalo de varredura
-    const { data: existingEvents } = await supabase
-      .from('events')
-      .select('id, routine_id, title, start_time')
-      .eq('family_id', familyId)
-      .gte('start_time', `${scanStartStr}T00:00:00`)
-      .lte('start_time', `${scanEndStr}T23:59:59`);
+    let existingEvents = preloadedEvents;
+    // Otimização: se os eventos da tela já foram passados em memória, dispensa requisição remota ao Supabase!
+    if (!existingEvents) {
+      const scanStartStr = toLocalDateString(startDate);
+      const scanEndStr = toLocalDateString(endDate);
+      const { data: dbEvents } = await supabase
+        .from('events')
+        .select('id, routine_id, title, start_time')
+        .eq('family_id', familyId)
+        .gte('start_time', `${scanStartStr}T00:00:00`)
+        .lte('start_time', `${scanEndStr}T23:59:59`);
+      existingEvents = dbEvents || [];
+    }
 
     // Cria conjunto de chaves literais para lookup O(1)
     const existingKeySet = new Set<string>();
-    (existingEvents || []).forEach((ev) => {
+    (existingEvents || []).forEach((ev: any) => {
       const dateKey = extractLiteralDate(ev.start_time);
       const timeKey = extractLiteralTime(ev.start_time);
       const cleanTitle = (ev.title || '').trim().toLowerCase();
@@ -373,7 +377,17 @@ const syncFutureRoutinesInBackground = async (familyId: string, routines: any[])
 
 export const App: React.FC = () => {
   const { hasUpdate, latestVersion, reloadApp } = usePwaUpdate();
-  const [family, setFamily] = useState<Family | null>(null);
+  const [family, setFamilyState] = useState<Family | null>(null);
+  const familyRef = useRef<Family | null>(null);
+  const setFamily = useCallback((f: Family | null | ((prev: Family | null) => Family | null)) => {
+    setFamilyState((prev) => {
+      const next = typeof f === 'function' ? f(prev) : f;
+      familyRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const isLoadingDataRef = useRef(false);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -398,9 +412,10 @@ export const App: React.FC = () => {
   const [inviteFamilyId, setInviteFamilyId] = useState<string | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-  // Estados do Painel de Resumo (Meu Dia e Balanço)
+  // Estados do Painel de Resumo (Meu Dia e Balanço) e Navegação Mobile
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [summaryInitialTab, setSummaryInitialTab] = useState<'today' | 'week'>('today');
+  const [activeTab, setActiveTab] = useState<BottomNavTab>('agenda');
 
   // Estado para o Módulo Super-Admin (/admin)
   const [isAdminViewOpen, setIsAdminViewOpen] = useState<boolean>(() => {
@@ -533,6 +548,12 @@ export const App: React.FC = () => {
 
   // Carrega família, membros, locais e eventos do Supabase filtrados pela data visível
   const loadData = useCallback(async () => {
+    // Evita concorrência e execuções duplicadas simultâneas (ex: montagem inicial + SIGNED_IN)
+    if (isLoadingDataRef.current) {
+      return;
+    }
+    isLoadingDataRef.current = true;
+
     try {
       // 0. Verifica autenticação no Supabase Auth
       const {
@@ -555,16 +576,19 @@ export const App: React.FC = () => {
         return;
       }
 
-      // 1. Identifica a família (com reutilização em memória se já carregada)
-      let currentFamily = family;
+      // 1. Identifica a família (com reutilização direta em memória se já carregada)
+      let currentFamily = familyRef.current;
+      const range = getVisibleRange(currentDate, viewMode);
+
+      let loadedMembers: FamilyMember[] = [];
+      let locations: Location[] = [];
+      let eventsData: any[] = [];
+      let allRoutinesData: any[] = [];
 
       if (!currentFamily || joinFamilyId) {
-        let query = supabase.from('families').select('*');
+        let targetFamilyId = joinFamilyId;
 
-        if (joinFamilyId) {
-          query = query.eq('id', joinFamilyId);
-          setInviteFamilyId(joinFamilyId);
-        } else if (sessionUser) {
+        if (!targetFamilyId && sessionUser) {
           // Busca a família vinculada ao usuário logado
           const { data: memberRows } = await supabase
             .from('family_members')
@@ -573,15 +597,20 @@ export const App: React.FC = () => {
             .limit(1);
 
           if (memberRows && memberRows.length > 0 && memberRows[0].family_id) {
-            query = query.eq('id', memberRows[0].family_id);
+            targetFamilyId = memberRows[0].family_id;
           } else {
-            query = query.order('created_at', { ascending: true }).limit(1);
+            const { data: firstFams } = await supabase
+              .from('families')
+              .select('id')
+              .order('created_at', { ascending: true })
+              .limit(1);
+            if (firstFams && firstFams.length > 0) {
+              targetFamilyId = firstFams[0].id;
+            }
           }
         }
 
-        const { data: familiesData, error: famError } = await query;
-
-        if (famError || !familiesData || familiesData.length === 0) {
+        if (!targetFamilyId) {
           setFamily(null);
           setMembers([]);
           setEvents([]);
@@ -592,7 +621,43 @@ export const App: React.FC = () => {
           window.history.replaceState({}, '', window.location.pathname);
         }
 
-        const rawFamily = familiesData[0];
+        // PARALELIZAÇÃO TOTAL DA INICIALIZAÇÃO:
+        // Families, Subscriptions, Members, Locations, Events e Routines em UMA ÚNICA rodada paralela!
+        const [
+          familyResult,
+          subResult,
+          membersResult,
+          locationsResult,
+          eventsResult,
+          routinesResult
+        ] = await Promise.all([
+          supabase.from('families').select('*').eq('id', targetFamilyId).maybeSingle(),
+          supabase.from('subscriptions').select(`
+            id,
+            status,
+            billing_cycle,
+            expires_at,
+            ai_credits_used,
+            plans (
+              id,
+              name,
+              monthly_ai_credits
+            )
+          `).eq('family_id', targetFamilyId).maybeSingle(),
+          supabase.from('family_members').select('*').eq('family_id', targetFamilyId).order('created_at', { ascending: true }),
+          supabase.from('locations').select('*').eq('family_id', targetFamilyId),
+          supabase.from('events').select('*').eq('family_id', targetFamilyId).gte('start_time', range.start).lte('start_time', range.end).order('start_time', { ascending: true }),
+          supabase.from('routines').select('*').eq('family_id', targetFamilyId)
+        ]);
+
+        const rawFamily = familyResult.data;
+        if (!rawFamily) {
+          setFamily(null);
+          setMembers([]);
+          setEvents([]);
+          return;
+        }
+
         let enrichedFamily: Family = {
           ...rawFamily,
           plan_name: 'Família Pro IA Anual',
@@ -603,96 +668,58 @@ export const App: React.FC = () => {
           ai_credits_limit: 250
         };
 
-        try {
-          const { data: subData } = await supabase
-            .from('subscriptions')
-            .select(`
-              id,
-              status,
-              billing_cycle,
-              expires_at,
-              ai_credits_used,
-              plans (
-                id,
-                name,
-                monthly_ai_credits
-              )
-            `)
-            .eq('family_id', rawFamily.id)
-            .maybeSingle();
+        const subData = subResult.data;
+        if (subData) {
+          const planObj = subData.plans as any;
+          const expDate = subData.expires_at ? new Date(subData.expires_at) : null;
+          const daysRem = expDate
+            ? Math.max(0, Math.ceil((expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+            : 365;
+          const formattedExp = expDate ? expDate.toLocaleDateString('pt-BR') : '15/10/2027';
+          const planName = planObj?.name || (subData.billing_cycle === 'YEARLY' ? 'Família Pro IA Anual' : 'Família Pro IA');
 
-          if (subData) {
-            const planObj = subData.plans as any;
-            const expDate = subData.expires_at ? new Date(subData.expires_at) : null;
-            const daysRem = expDate
-              ? Math.max(0, Math.ceil((expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-              : 365;
-            const formattedExp = expDate ? expDate.toLocaleDateString('pt-BR') : '15/10/2027';
-            const planName = planObj?.name || (subData.billing_cycle === 'YEARLY' ? 'Família Pro IA Anual' : 'Família Pro IA');
-
-            enrichedFamily = {
-              ...enrichedFamily,
-              plan_name: planName,
-              plan_badge: planName.includes('Pro') ? 'Pro IA' : (planName.includes('Essencial') ? 'Essencial' : 'Degustação'),
-              plan_status: subData.status,
-              plan_expires_at: formattedExp,
-              plan_days_remaining: daysRem,
-              ai_credits_limit: planObj?.monthly_ai_credits || 250
-            };
-          }
-        } catch (subErr) {
-          console.warn('Subscrição fallback:', subErr);
+          enrichedFamily = {
+            ...enrichedFamily,
+            plan_name: planName,
+            plan_badge: planName.includes('Pro') ? 'Pro IA' : (planName.includes('Essencial') ? 'Essencial' : 'Degustação'),
+            plan_status: subData.status,
+            plan_expires_at: formattedExp,
+            plan_days_remaining: daysRem,
+            ai_credits_limit: planObj?.monthly_ai_credits || 250
+          };
         }
 
         currentFamily = enrichedFamily;
         setFamily(currentFamily);
+
+        loadedMembers = membersResult.data || [];
+        locations = locationsResult.data || [];
+        eventsData = eventsResult.data || [];
+        allRoutinesData = routinesResult.data || [];
+      } else {
+        // Família já conhecida e preservada em memória: carrega membros, locais, rotinas e eventos simultaneamente
+        const [
+          membersResult,
+          locationsResult,
+          eventsResult,
+          routinesResult
+        ] = await Promise.all([
+          supabase.from('family_members').select('*').eq('family_id', currentFamily.id).order('created_at', { ascending: true }),
+          supabase.from('locations').select('*').eq('family_id', currentFamily.id),
+          supabase.from('events').select('*').eq('family_id', currentFamily.id).gte('start_time', range.start).lte('start_time', range.end).order('start_time', { ascending: true }),
+          supabase.from('routines').select('*').eq('family_id', currentFamily.id)
+        ]);
+
+        loadedMembers = membersResult.data || [];
+        locations = locationsResult.data || [];
+        eventsData = eventsResult.data || [];
+        allRoutinesData = routinesResult.data || [];
       }
-
-      if (!currentFamily) {
-        return;
-      }
-
-      // 2. PARALELIZAÇÃO TOTAL (Batching concorrente via Promise.all)
-      // Carrega membros, locais, rotinas e eventos do intervalo visível SIMULTANEAMENTE
-      const range = getVisibleRange(currentDate, viewMode);
-
-      const [
-        membersResult,
-        locationsResult,
-        eventsResult,
-        routinesResult
-      ] = await Promise.all([
-        supabase
-          .from('family_members')
-          .select('*')
-          .eq('family_id', currentFamily.id)
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('locations')
-          .select('*')
-          .eq('family_id', currentFamily.id),
-        supabase
-          .from('events')
-          .select('*')
-          .eq('family_id', currentFamily.id)
-          .gte('start_time', range.start)
-          .lte('start_time', range.end)
-          .order('start_time', { ascending: true }),
-        supabase
-          .from('routines')
-          .select('*')
-          .eq('family_id', currentFamily.id)
-      ]);
-
-      const loadedMembers: FamilyMember[] = membersResult.data || [];
-      const locations: Location[] = locationsResult.data || [];
-      let eventsData = eventsResult.data || [];
-      const allRoutinesData = routinesResult.data || [];
 
       setMembers(loadedMembers);
 
-      // 3. Sincronização prioritária e ágil de rotinas (usando rotinas já em cache de memória)
-      const newlyCreatedRoutineEvents = await ensureRoutineEvents(currentFamily.id, range, allRoutinesData);
+      // 3. Sincronização ágil de rotinas em memória (zero roundtrips extras ao banco!)
+      const newlyCreatedRoutineEvents = await ensureRoutineEvents(currentFamily.id, range, allRoutinesData, eventsData);
 
       if (newlyCreatedRoutineEvents.length > 0) {
         const visibleNewlyCreated = newlyCreatedRoutineEvents.filter((e) => {
@@ -705,7 +732,6 @@ export const App: React.FC = () => {
       }
 
       // 4. Busca participantes filtrada estritamente pelos IDs dos eventos visíveis
-      // Elimina o table scan global de SELECT * em toda a tabela event_participants
       let partData: any[] = [];
       const eventIds = eventsData.map((e) => e.id).filter(Boolean);
       if (eventIds.length > 0) {
@@ -745,11 +771,10 @@ export const App: React.FC = () => {
         };
       });
 
-      // 5. Deduplicação imediata em memória e limpeza automática em background no banco
+      // 6. Deduplicação imediata em memória e limpeza automática em background no banco
       const { dedupedEvents, duplicateIdsToDelete } = deduplicateAndCleanEvents<EventItem>(populated as EventItem[]);
 
       if (duplicateIdsToDelete.length > 0) {
-        console.log(`[Deduplication] Excluindo ${duplicateIdsToDelete.length} eventos duplicados no banco...`);
         supabase
           .from('events')
           .delete()
@@ -757,15 +782,13 @@ export const App: React.FC = () => {
           .then(({ error }) => {
             if (error) {
               console.warn('[Deduplication] Erro ao deletar duplicatas em background:', error);
-            } else {
-              console.log(`[Deduplication] ${duplicateIdsToDelete.length} duplicatas removidas com sucesso.`);
             }
           });
       }
 
       setEvents(dedupedEvents);
 
-      // 6. Materialização de longo prazo (90 dias) disparada em segundo plano com debounce
+      // 7. Materialização de longo prazo (90 dias) disparada em segundo plano com debounce
       if (typeof window !== 'undefined' && currentFamily.id) {
         const familyId = currentFamily.id;
         const cacheKey = `last_routine_sync_${familyId}`;
@@ -782,6 +805,7 @@ export const App: React.FC = () => {
       console.error('Erro ao conectar ao Supabase:', err);
       setFamily(null);
     } finally {
+      isLoadingDataRef.current = false;
       setIsInitialLoading(false);
     }
   }, [currentDate, viewMode]);
@@ -894,7 +918,11 @@ export const App: React.FC = () => {
   // Abrir Resumo / Balanço
   const handleOpenSummary = (initialTab: 'today' | 'week' = 'today') => {
     setSummaryInitialTab(initialTab);
-    setIsSummaryModalOpen(true);
+    if (initialTab === 'today') {
+      setActiveTab('my-day');
+    } else {
+      setActiveTab('balance');
+    }
   };
 
   // Agendador de Notificações em segundo plano para os eventos da semana
@@ -1640,9 +1668,11 @@ export const App: React.FC = () => {
   // 4. Usuário LOGADO COM família ativa: Renderiza o painel semanal existente sem alterações
 
   const unassignedCount = events.filter((e) => !e.responsible_id).length;
+  const todayStr = toLocalDateString();
+  const todayEventsCount = events.filter((e) => extractLiteralDate(e.start_time) === todayStr).length;
 
   return (
-    <div className="min-h-screen bg-[#F4F8FA] text-slate-800 flex flex-col font-sans relative overflow-x-hidden">
+    <div className="h-[100dvh] max-h-[100dvh] bg-[#F4F8FA] text-slate-800 flex flex-col font-sans relative overflow-hidden">
       {/* Sistema de Feedback Visual (Toasts de Sucesso e Erro) */}
       <Toast toasts={toasts} onDismiss={dismissToast} />
 
@@ -1663,6 +1693,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
+      {/* Header Compacto Fixo no Topo */}
       <Header
         family={family}
         onOpenManageFamily={() => setIsManageFamilyOpen(true)}
@@ -1684,144 +1715,162 @@ export const App: React.FC = () => {
         onReloadApp={reloadApp}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
-        {/* Barra de Navegação Temporal e Seletor de Modos (Dia, Semana, Mês) */}
-        <CalendarNavigation
-          currentDate={currentDate}
-          viewMode={viewMode}
-          onPrev={handlePrevDate}
-          onNext={handleNextDate}
-          onToday={handleToday}
-          onViewModeChange={(mode) => setViewMode(mode)}
-          onOpenSummary={handleOpenSummary}
-        />
+      {/* Frame Central com rolagem interna contida */}
+      <main className="flex-1 overflow-y-auto overscroll-contain max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-col justify-between">
+        <div className="space-y-4">
+          {/* Aba 1: Agenda Completa (Dia, Semana, Mês) */}
+          {activeTab === 'agenda' && (
+            <div className="space-y-4">
+              {/* Barra de Navegação Temporal e Seletor de Modos */}
+              <CalendarNavigation
+                currentDate={currentDate}
+                viewMode={viewMode}
+                onPrev={handlePrevDate}
+                onNext={handleNextDate}
+                onToday={handleToday}
+                onViewModeChange={(mode) => setViewMode(mode)}
+                onOpenSummary={handleOpenSummary}
+              />
 
-        {/* Relatório Diário Matinal ("Briefing do Dia") */}
-        <div id="daily-briefing-section">
-          <DailyBriefingCard
-            familyId={family?.id}
-            events={events}
-            members={members}
-            currentMember={currentMember}
-            onCardClick={handleCardClick}
-            onOpenSummary={handleOpenSummary}
-            onEventsChanged={loadData}
-            onNotify={showToast}
-            onOpenSearch={() => setIsSearchOpen(true)}
-          />
-        </div>
+              {/* Banner de Atividades Sem Responsável */}
+              {unassignedCount > 0 && (
+                <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-3.5 flex items-center justify-between text-xs text-amber-900 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">⚠️</span>
+                    <span>
+                      Há <strong>{unassignedCount} atividade(s)</strong> sem responsável definido no período selecionado.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsUnassignedModalOpen(true)}
+                    className="font-bold text-amber-900 underline hover:text-amber-950 cursor-pointer bg-transparent border-0 p-0 text-xs transition-colors"
+                  >
+                    Revisar agora
+                  </button>
+                </div>
+              )}
 
-        {/* Banner de Atividades Sem Responsável */}
-        {unassignedCount > 0 && (
-          <div className="mb-4 bg-amber-50/80 border border-amber-200/90 rounded-2xl p-3.5 flex items-center justify-between text-xs text-amber-900 shadow-2xs">
-            <div className="flex items-center gap-2">
-              <span className="text-base">⚠️</span>
-              <span>
-                Há <strong>{unassignedCount} atividade(s)</strong> sem responsável definido no período selecionado.
-              </span>
+              {/* Barra de Filtro de Membros */}
+              <div className="flex items-center justify-between flex-wrap gap-2 pb-1">
+                <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-1">
+                  <button
+                    onClick={() => setSelectedMemberId(null)}
+                    className={`px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer shrink-0 ${
+                      selectedMemberId === null
+                        ? 'bg-sky-700 text-white shadow-xs font-bold'
+                        : 'bg-white text-slate-600 border border-sky-100 hover:bg-sky-50 shadow-2xs font-semibold'
+                    }`}
+                  >
+                    Toda a Família
+                  </button>
+                  {members.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setSelectedMemberId(m.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                        selectedMemberId === m.id
+                          ? 'ring-2 ring-sky-700 text-white shadow-xs font-bold'
+                          : 'bg-white text-slate-700 border border-sky-100 hover:bg-sky-50 shadow-2xs font-semibold'
+                      }`}
+                      style={{ backgroundColor: selectedMemberId === m.id ? m.color : undefined }}
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full shadow-2xs" style={{ backgroundColor: m.color }} />
+                      {getMemberDisplayName(m)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Renderização Condicional da Grade (Semana / Dia / Mês) */}
+              {viewMode === 'week' && (
+                <WeekView
+                  currentDate={currentDate}
+                  events={events}
+                  members={members}
+                  selectedMemberId={selectedMemberId}
+                  onCardClick={handleCardClick}
+                  onMoveEvent={handleMoveEvent}
+                />
+              )}
+
+              {viewMode === 'day' && (
+                <DayView
+                  currentDate={currentDate}
+                  events={events}
+                  members={members}
+                  selectedMemberId={selectedMemberId}
+                  onCardClick={handleCardClick}
+                  onAddNewActivity={() => setIsManualAddOpen(true)}
+                />
+              )}
+
+              {viewMode === 'month' && (
+                <MonthView
+                  currentDate={currentDate}
+                  events={events}
+                  members={members}
+                  selectedMemberId={selectedMemberId}
+                  onSelectDate={(date) => {
+                    setCurrentDate(date);
+                    setViewMode('day');
+                  }}
+                  onCardClick={handleCardClick}
+                />
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => setIsUnassignedModalOpen(true)}
-              className="font-bold text-amber-900 underline hover:text-amber-950 cursor-pointer bg-transparent border-0 p-0 text-xs transition-colors"
-            >
-              Revisar agora
-            </button>
-          </div>
-        )}
+          )}
 
-        {/* Barra de Filtro de Membros */}
-        <div className="flex items-center justify-between flex-wrap gap-2 pb-2">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <button
-              onClick={() => setSelectedMemberId(null)}
-              className={`px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
-                selectedMemberId === null
-                  ? 'bg-sky-700 text-white shadow-xs font-bold'
-                  : 'bg-white text-slate-600 border border-sky-100 hover:bg-sky-50 shadow-2xs font-semibold'
-              }`}
-            >
-              Toda a Família
-            </button>
-            {members.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setSelectedMemberId(m.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
-                  selectedMemberId === m.id
-                    ? 'ring-2 ring-sky-700 text-white shadow-xs font-bold'
-                    : 'bg-white text-slate-700 border border-sky-100 hover:bg-sky-50 shadow-2xs font-semibold'
-                }`}
-                style={{ backgroundColor: selectedMemberId === m.id ? m.color : undefined }}
-              >
-                <span className="w-2.5 h-2.5 rounded-full shadow-2xs" style={{ backgroundColor: m.color }} />
-                {getMemberDisplayName(m)}
-              </button>
-            ))}
-          </div>
+          {/* Aba 2: Meu Dia (Resumo Familiar & Briefing Matinal) */}
+          {activeTab === 'my-day' && (
+            <div id="daily-briefing-section" className="space-y-4">
+              <DailyBriefingCard
+                familyId={family?.id}
+                events={events}
+                members={members}
+                currentMember={currentMember}
+                onCardClick={handleCardClick}
+                onOpenSummary={handleOpenSummary}
+                onEventsChanged={loadData}
+                onNotify={showToast}
+                onOpenSearch={() => setIsSearchOpen(true)}
+              />
+            </div>
+          )}
+
+          {/* Aba 3: Balanço Semanal da Família */}
+          {activeTab === 'balance' && (
+            <BalanceView
+              events={events}
+              members={members}
+              currentMember={currentMember}
+              currentDate={currentDate}
+              onOpenUnassignedModal={() => setIsUnassignedModalOpen(true)}
+              onCardClick={handleCardClick}
+            />
+          )}
         </div>
-
-        {/* Renderização Condicional da Grade (Semana / Dia / Mês) */}
-        {viewMode === 'week' && (
-          <WeekView
-            currentDate={currentDate}
-            events={events}
-            members={members}
-            selectedMemberId={selectedMemberId}
-            onCardClick={handleCardClick}
-            onMoveEvent={handleMoveEvent}
-          />
-        )}
-
-        {viewMode === 'day' && (
-          <DayView
-            currentDate={currentDate}
-            events={events}
-            members={members}
-            selectedMemberId={selectedMemberId}
-            onCardClick={handleCardClick}
-            onAddNewActivity={() => setIsManualAddOpen(true)}
-          />
-        )}
-
-        {viewMode === 'month' && (
-          <MonthView
-            currentDate={currentDate}
-            events={events}
-            members={members}
-            selectedMemberId={selectedMemberId}
-            onSelectDate={(date) => {
-              setCurrentDate(date);
-              setViewMode('day');
-            }}
-            onCardClick={handleCardClick}
-          />
-        )}
       </main>
 
-      {/* Rodapé Global */}
-      <footer className="mt-auto py-6 border-t border-sky-100/80 bg-white/40 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="flex items-center gap-1.5 font-medium">
-            <span className="font-bold text-slate-800">Nosso Dia</span>
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200">v{APP_VERSION}</span>
-          </p>
-
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={handleOpenAdmin}
-              className="text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-1 cursor-pointer font-medium text-xs"
-              title="Painel Super-Admin e Faturamento Asaas"
-            >
-              <span>🛡️ Super-Admin (/admin)</span>
-            </button>
-            <p className="text-slate-400 text-xs">
-              Powered by <strong className="text-sky-700 font-semibold">Flavio Santiago Consultor IA</strong> — 2026
-            </p>
-          </div>
-        </div>
-      </footer>
+      {/* Menu Bar no Rodapé (Bottom Navigation Bar Mobile-First) */}
+      <BottomNavBar
+        activeTab={activeTab}
+        onChangeTab={(tab) => {
+          if (tab === 'family') {
+            setIsManageFamilyOpen(true);
+          } else {
+            setActiveTab(tab);
+          }
+        }}
+        onOpenQuickAddWithAI={() => setIsQuickAddOpen(true)}
+        onOpenNewActivityManual={() => {
+          setManualAddInitialData(null);
+          setIsManualAddOpen(true);
+        }}
+        onOpenSearch={() => setIsSearchOpen(true)}
+        todayEventsCount={todayEventsCount}
+        unassignedCount={unassignedCount}
+      />
 
       {/* Modal: Captura com IA */}
       <QuickAddWithAI
@@ -1940,7 +1989,7 @@ export const App: React.FC = () => {
 
       {/* Banner Flutuante de Atualização PWA na Zona do Polegar */}
       {hasUpdate && (
-        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-800 z-50 flex items-center justify-between gap-3 animate-slide-up">
+        <div className="fixed bottom-20 sm:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-800 z-50 flex items-center justify-between gap-3 animate-slide-up">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="text-xl shrink-0">🚀</span>
             <div className="min-w-0">

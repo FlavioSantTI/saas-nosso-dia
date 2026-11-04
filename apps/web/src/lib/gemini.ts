@@ -58,7 +58,9 @@ export async function extractRoutineWithGemini(
   promptText: string,
   imageBase64: string | null,
   imageMimeType: string | null,
-  members: FamilyMember[]
+  members: FamilyMember[],
+  documentText?: string | null,
+  documentName?: string | null
 ): Promise<ExtractedRoutineData> {
   const apiKey = await getGeminiApiKey();
 
@@ -136,7 +138,13 @@ Formato OBRIGATÓRIO de saída (JSON puro):
 }`;
 
   const parts: any[] = [];
-  const fullText = `${systemInstruction}\n\nConteúdo a analisar:\n"${promptText || 'Analise a imagem anexa e extraia a rotina escolar.'}"`;
+  const defaultPrompt = imageMimeType === 'application/pdf' || documentText
+    ? 'Analise o documento anexo e extraia o compromisso/rotina.'
+    : 'Analise a imagem anexa e extraia a rotina escolar.';
+  let fullText = `${systemInstruction}\n\nConteúdo a analisar:\n"${promptText || defaultPrompt}"`;
+  if (documentText) {
+    fullText += `\n\nDocumento anexo${documentName ? ` (${documentName})` : ''}:\n"""\n${documentText}\n"""`;
+  }
   parts.push({ text: fullText });
 
   if (imageBase64 && imageMimeType) {

@@ -13,6 +13,7 @@ interface ActivityCardProps {
 
 export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, onClick, onDragStart }) => {
   const isWithoutResponsible = !event.responsible_id;
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('text/plain', event.id);
@@ -24,63 +25,70 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
 
   return (
     <div
-      draggable={true}
+      draggable={!isTouchDevice}
       onDragStart={handleDragStart}
       onClick={() => onClick?.(event)}
-      className={`p-3.5 rounded-2xl border text-sm shadow-xs transition-all duration-200 bg-white flex flex-col justify-between cursor-grab active:cursor-grabbing hover:shadow-md select-none group relative ${
+      className={`p-3.5 rounded-2xl border text-sm shadow-2xs transition-all duration-200 bg-white flex flex-col justify-between cursor-pointer hover:shadow-xs select-none group relative ${
         hasConflict
           ? 'bg-red-50/50 border-red-300 ring-1 ring-red-300 hover:border-red-400'
           : isWithoutResponsible
-            ? 'border-amber-200/90 bg-amber-50/25 hover:border-amber-300'
-            : 'border-slate-200/70 hover:border-sky-200 hover:bg-slate-50/30'
+            ? 'border-amber-200/90 bg-amber-50/30 hover:border-amber-300'
+            : 'border-slate-200/80 hover:border-sky-300 hover:bg-slate-50/40'
       }`}
     >
       <div>
-        {/* Metadados: Horário, Lembrete, Local */}
-        <div className="flex items-center justify-between text-xs text-slate-500 mb-2 gap-1 flex-wrap">
+        {/* Metadados Superiores: Horário, Lembrete e Local */}
+        <div className="flex items-center justify-between text-caption text-slate-600 mb-2 gap-1.5 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-sky-800 bg-sky-50 border border-sky-100/80 px-2 py-0.5 rounded-lg flex items-center gap-1 text-[11px]">
-              <Clock className="w-3 h-3 text-sky-600 shrink-0" />
-              {extractLiteralTime(event.start_time)} - {extractLiteralTime(event.end_time)}
+            <span className="font-bold text-sky-900 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-lg flex items-center gap-1.5 text-caption">
+              <Clock className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+              <span>{extractLiteralTime(event.start_time)} - {extractLiteralTime(event.end_time)}</span>
             </span>
+
             {event.reminder_minutes !== null && event.reminder_minutes !== undefined && (
               <span
-                className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/70 px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
+                className="text-caption font-bold text-amber-900 bg-amber-100/70 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1"
                 title={`Notificação: ${event.reminder_minutes} min antes`}
               >
-                <Bell className="w-2.5 h-2.5 text-amber-600" />
-                {event.reminder_minutes}m
+                <Bell className="w-3 h-3 text-amber-700" />
+                <span>{event.reminder_minutes}m</span>
               </span>
             )}
           </div>
+
           {event.location && (
-            <span className="text-slate-500 text-[11px] font-medium truncate max-w-[110px] flex items-center gap-0.5" title={event.location.name}>
-              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+            <span
+              className="text-slate-600 text-caption font-semibold truncate max-w-[130px] flex items-center gap-1"
+              title={event.location.name}
+            >
+              <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               <span className="truncate">{event.location.name}</span>
             </span>
           )}
         </div>
 
         {/* Título da Atividade */}
-        <h3 className="font-bold text-slate-800 text-sm mb-2.5 group-hover:text-sky-700 transition-colors flex items-center justify-between">
+        <h3 className="font-bold text-slate-900 text-body mb-2.5 group-hover:text-sky-800 transition-colors flex items-center justify-between">
           <span className="leading-snug flex items-center flex-wrap gap-1.5">
             <span>{event.title}</span>
             {event.location?.name && (
-              <span className="inline-flex items-center text-[10px] font-normal text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
-                • 📍 {event.location.name}
+              <span className="inline-flex items-center text-caption font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                📍 {event.location.name}
               </span>
             )}
           </span>
-          <span className="text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors ml-1 shrink-0 font-mono">⋮⋮</span>
+          <span className="text-caption text-slate-400 group-hover:text-slate-600 transition-colors ml-1 shrink-0 font-mono">
+            ⋮⋮
+          </span>
         </h3>
 
-        {/* Participantes */}
+        {/* Participantes (Filhos/Família) com cores distintivas */}
         {event.participants && event.participants.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2.5">
+          <div className="flex flex-wrap gap-1.5 mb-2.5">
             {event.participants.map((p) => (
               <span
                 key={p.id}
-                className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-semibold text-white shadow-2xs"
+                className="inline-flex items-center px-2.5 py-1 rounded-lg text-caption font-bold text-white shadow-2xs"
                 style={{ backgroundColor: p.color }}
               >
                 {getMemberDisplayName(p)}
@@ -90,30 +98,29 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
         )}
       </div>
 
-      {/* Rodapé: Responsável */}
-      <div className="pt-2 border-t border-slate-100/90 flex items-center justify-between text-xs">
-        <span className="text-slate-400 font-medium text-[11px]">Responsável:</span>
+      {/* Rodapé: Responsável pela Logística (Leva/Busca) */}
+      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-caption">
+        <span className="text-slate-600 font-semibold text-caption">Responsável:</span>
         {event.responsible ? (
-          <span className="font-semibold text-slate-700 flex items-center gap-1 text-[11px]">
-            <User className="w-3 h-3 text-slate-500 shrink-0" />
+          <span className="font-bold text-slate-800 flex items-center gap-1.5 text-caption">
+            <User className="w-3.5 h-3.5 text-sky-700 shrink-0" />
             <span>{getMemberDisplayName(event.responsible)}</span>
           </span>
         ) : (
-          <span className="text-amber-800 font-bold bg-amber-100/80 px-1.5 py-0.5 rounded-md text-[10px] flex items-center gap-1 animate-pulse border border-amber-200/60">
-            <AlertTriangle className="w-2.5 h-2.5 text-amber-700" />
-            Definir
+          <span className="text-amber-950 font-bold bg-amber-100/90 px-2.5 py-1 rounded-lg text-caption flex items-center gap-1 border border-amber-300 shadow-2xs">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+            <span>Sem responsável</span>
           </span>
         )}
       </div>
 
       {/* Alerta de Conflito de Horário */}
       {hasConflict && (
-        <div className="mt-2 text-[11px] font-bold text-red-700 bg-red-100/90 border border-red-200 px-2 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+        <div className="mt-2 text-caption font-bold text-red-900 bg-red-100 border border-red-200 px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
+          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
           <span>Conflito para {getMemberDisplayName(event.responsible) || 'responsável'}!</span>
         </div>
       )}
     </div>
   );
 };
-

@@ -268,53 +268,58 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-sky-100/80 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-2xl w-full p-5 sm:p-8 shadow-2xl border border-sky-100/80 flex flex-col max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
+        {/* Puxador Mobile (Drag Handle) */}
+        <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-3 sm:hidden shrink-0" aria-hidden="true" />
+
         {/* Header do Modal */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">👥</span>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 leading-tight">
+        <div className="flex items-center justify-between gap-2 pb-3.5 border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-2xl shrink-0">👥</span>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate">
                 Gestão da Família
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-600 line-clamp-2">
                 Gerencie o nome da família e os membros cadastrados no Supabase
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 font-bold text-lg p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+            aria-label="Fechar"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 font-bold text-lg p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer shrink-0"
           >
             ✕
           </button>
         </div>
 
         {/* Abas do Modal */}
-        <div className="flex border-b border-slate-100 gap-4 pt-1">
+        <div className="flex border-b border-slate-100 gap-2 sm:gap-4 pt-2 shrink-0 overflow-x-auto">
           <button
             type="button"
             onClick={() => setModalTab('members')}
-            className={`pb-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
               modalTab === 'members'
                 ? 'border-sky-600 text-sky-700'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Users className="w-4 h-4" />
+            <Users className="w-4 h-4 shrink-0" />
             <span>Membros & Família</span>
           </button>
           <button
             type="button"
             onClick={() => setModalTab('billing')}
-            className={`pb-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
               modalTab === 'billing'
                 ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <CreditCard className="w-4 h-4" />
+            <CreditCard className="w-4 h-4 shrink-0" />
             <span>Plano & Assinatura</span>
             <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200/80 px-2 py-0.5 rounded-full font-bold">
               Asaas
@@ -322,27 +327,28 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
           </button>
         </div>
 
-        {/* Conteúdo com scroll */}
-        <div className="overflow-y-auto py-5 space-y-6 flex-1 pr-1">
+        {/* Conteúdo com scroll vertical (sem overflow horizontal) */}
+        <div className="overflow-y-auto overflow-x-hidden py-4 sm:py-5 space-y-5 flex-1 pr-0.5">
           {modalTab === 'members' ? (
             <>
               {/* Seção: Nome da Família */}
-          <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+          <div className="bg-slate-50/80 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 space-y-2">
+            <label htmlFor="manage-family-name" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
               Nome da Família
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
+                id="manage-family-name"
                 type="text"
                 value={familyName}
                 onChange={(e) => setFamilyName(e.target.value)}
-                className="flex-1 text-sm font-semibold px-3 py-2 bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
+                className="w-full sm:flex-1 min-w-0 text-base sm:text-sm font-semibold px-3.5 py-2.5 bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
               />
               <button
                 type="button"
                 onClick={handleSaveFamilyName}
                 disabled={isUpdatingFamily || !familyName.trim() || familyName === family.name}
-                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0 whitespace-nowrap"
               >
                 {isUpdatingFamily ? 'Salvando...' : familySuccess ? '✓ Salvo!' : 'Salvar Nome'}
               </button>
@@ -350,19 +356,20 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
           </div>
 
           {/* Seção: Convidar Cônjuge/Responsável */}
-          <div className="bg-sky-50/80 p-4 rounded-2xl border border-sky-200/90 space-y-2">
-            <label className="block text-xs font-bold uppercase tracking-wider text-sky-800">
+          <div className="bg-sky-50/80 p-3.5 sm:p-4 rounded-2xl border border-sky-200/90 space-y-2">
+            <label htmlFor="manage-invite-url" className="block text-xs font-bold uppercase tracking-wider text-sky-900">
               🔗 Convidar Cônjuge/Responsável
             </label>
-            <p className="text-xs text-sky-700 mb-2">
+            <p className="text-xs text-sky-800 leading-relaxed">
               Compartilhe o link abaixo para outro adulto acessar e gerenciar a família.
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
+                id="manage-invite-url"
                 type="text"
                 readOnly
                 value={getFamilyInviteUrl(family.id)}
-                className="flex-1 text-xs font-mono px-3 py-2 bg-white rounded-xl border border-sky-200 text-sky-950 focus:outline-none select-all"
+                className="w-full sm:flex-1 min-w-0 truncate text-xs font-mono px-3.5 py-2.5 bg-white rounded-xl border border-sky-200 text-sky-950 focus:outline-none select-all"
               />
               <button
                 type="button"
@@ -375,7 +382,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                     alert('Link de convite copiado com sucesso!');
                   }
                 }}
-                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl transition-all shadow-xs shrink-0 cursor-pointer flex items-center justify-center"
               >
                 Copiar Link de Convite
               </button>
@@ -385,7 +392,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
           {/* Seção: Lista de Membros */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                 Membros Cadastrados ({members.length})
               </h3>
             </div>
@@ -403,9 +410,9 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                 return (
                   <div
                     key={m.id}
-                    className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-slate-300 flex flex-col gap-2.5 transition-all shadow-2xs"
+                    className="p-3.5 bg-white rounded-2xl border border-slate-200 hover:border-slate-300 flex flex-col gap-3 transition-all shadow-2xs"
                   >
-                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                       {/* Seletor de Cor */}
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span
@@ -413,9 +420,10 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                           style={{ backgroundColor: current.color }}
                         />
                         <select
+                          aria-label={`Cor de ${current.name}`}
                           value={current.color}
                           onChange={(e) => handleMemberFieldChange(m.id, 'color', e.target.value)}
-                          className="text-xs bg-slate-100 rounded-md py-1 px-1.5 border border-slate-200 text-slate-700 cursor-pointer"
+                          className="text-base sm:text-xs bg-slate-100 rounded-lg py-1.5 px-2 border border-slate-200 text-slate-700 cursor-pointer"
                         >
                           {COLOR_PALETTE.map((c) => (
                             <option key={c} value={c}>
@@ -426,23 +434,25 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                       </div>
 
                       {/* Nome Completo */}
-                      <div className="flex-1 min-w-[130px]">
+                      <div className="w-full sm:flex-1 min-w-0 order-last sm:order-none">
                         <input
+                          aria-label="Nome completo do membro"
                           type="text"
                           value={current.name}
                           onChange={(e) => handleMemberFieldChange(m.id, 'name', e.target.value)}
                           placeholder="Nome completo (ex: Flavio Dias Santiago)"
-                          className="w-full text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          className="w-full text-base sm:text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
                         />
                       </div>
 
                       {/* Papel */}
                       <select
+                        aria-label={`Papel de ${current.name}`}
                         value={current.role}
                         onChange={(e) =>
                           handleMemberFieldChange(m.id, 'role', e.target.value as MemberRole)
                         }
-                        className="text-xs font-semibold bg-slate-100 rounded-lg px-2.5 py-1.5 border border-slate-200 text-slate-700 cursor-pointer shrink-0"
+                        className="text-base sm:text-xs font-semibold bg-slate-100 rounded-lg px-2.5 py-1.5 border border-slate-200 text-slate-700 cursor-pointer shrink-0"
                       >
                         <option value="ADMIN">Adulto (Admin)</option>
                         <option value="MEMBER">Adulto (Membro)</option>
@@ -450,13 +460,13 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                       </select>
 
                       {/* Ações */}
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 ml-auto sm:ml-0 shrink-0">
                         {hasChanged && (
                           <button
                             type="button"
                             onClick={() => handleSaveMember(m.id)}
                             disabled={savingMemberId === m.id}
-                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-colors shadow-xs cursor-pointer"
+                            className="min-h-[38px] px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-colors shadow-xs cursor-pointer"
                           >
                             {savingMemberId === m.id ? '...' : 'Salvar'}
                           </button>
@@ -464,8 +474,9 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDelete(m.id, m.name)}
-                          className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                          className="min-w-[38px] min-h-[38px] flex items-center justify-center text-slate-500 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                           title="Remover membro"
+                          aria-label={`Remover ${m.name}`}
                         >
                           🗑️
                         </button>
@@ -473,44 +484,48 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                     </div>
 
                     {/* Campo Nickname / Como é chamado na casa */}
-                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-1 border-t border-slate-100">
-                      <label className="text-[11px] font-semibold text-slate-500 shrink-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 pt-2 border-t border-slate-100">
+                      <label htmlFor={`member-nick-${m.id}`} className="text-[11px] font-semibold text-slate-600 leading-snug">
                         Como é chamado(a) na casa? (Apelido ou Primeiro Nome):
                       </label>
                       <input
+                        id={`member-nick-${m.id}`}
                         type="text"
                         value={current.nickname || ''}
                         onChange={(e) => handleMemberFieldChange(m.id, 'nickname', e.target.value)}
                         placeholder="Ex: Flávio, Rafa, Pai, Mãe"
-                        className="flex-1 text-xs px-2.5 py-1 bg-slate-50/70 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full sm:flex-1 min-w-0 text-base sm:text-xs px-3 py-2 sm:py-1.5 bg-slate-50/70 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </div>
 
                     {/* Campo E-mail e Disparo de Convite */}
-                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-1 border-t border-slate-100">
-                      <label className="text-[11px] font-semibold text-slate-500 shrink-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 pt-2 border-t border-slate-100">
+                      <label htmlFor={`member-email-${m.id}`} className="text-[11px] font-semibold text-slate-600 leading-snug">
                         E-mail (opcional para crianças, necessário para acesso):
                       </label>
-                      <input
-                        type="email"
-                        value={current.email || ''}
-                        onChange={(e) => handleMemberFieldChange(m.id, 'email', e.target.value)}
-                        placeholder="exemplo@email.com"
-                        className="flex-1 text-xs px-2.5 py-1 bg-slate-50/70 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500 font-medium"
-                      />
+                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:flex-1 min-w-0">
+                        <input
+                          id={`member-email-${m.id}`}
+                          type="email"
+                          value={current.email || ''}
+                          onChange={(e) => handleMemberFieldChange(m.id, 'email', e.target.value)}
+                          placeholder="exemplo@email.com"
+                          className="w-full sm:flex-1 min-w-0 text-base sm:text-xs px-3 py-2 sm:py-1.5 bg-slate-50/70 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500 font-medium"
+                        />
 
-                      {/* Botão de Disparo Rápido de Convite */}
-                      {current.role !== 'CHILD' && current.email && (
-                        <button
-                          type="button"
-                          onClick={() => handleSendInvite(current)}
-                          disabled={invitingMemberId === m.id}
-                          className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
-                          title="Disparar convite de acesso para o e-mail cadastrado"
-                        >
-                          <span>{invitingMemberId === m.id ? 'Enviando...' : '✉️ Enviar Convite de Acesso'}</span>
-                        </button>
-                      )}
+                        {/* Botão de Disparo Rápido de Convite */}
+                        {current.role !== 'CHILD' && current.email && (
+                          <button
+                            type="button"
+                            onClick={() => handleSendInvite(current)}
+                            disabled={invitingMemberId === m.id}
+                            className="w-full sm:w-auto min-h-[38px] px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
+                            title="Disparar convite de acesso para o e-mail cadastrado"
+                          >
+                            <span>{invitingMemberId === m.id ? 'Enviando...' : '✉️ Enviar Convite'}</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -521,72 +536,77 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
           {/* Seção: Adicionar Novo Membro */}
           <form
             onSubmit={handleAddNewMember}
-            className="p-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 space-y-3"
+            className="p-3.5 sm:p-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 space-y-3"
           >
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
               + Adicionar Novo Membro
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                <label htmlFor="add-member-name" className="block text-[11px] font-bold text-slate-700 mb-1">
                   Nome Completo *
                 </label>
                 <input
+                  id="add-member-name"
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="Ex: Flavio Dias Santiago"
-                  className="w-full text-xs font-medium px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  className="w-full text-base sm:text-xs font-medium px-3 py-2.5 sm:py-2 bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                <label htmlFor="add-member-nickname" className="block text-[11px] font-bold text-slate-700 mb-1">
                   Como é chamado(a) na casa? (Apelido ou Primeiro Nome)
                 </label>
                 <input
+                  id="add-member-nickname"
                   type="text"
                   value={newNickname}
                   onChange={(e) => setNewNickname(e.target.value)}
                   placeholder="Ex: Flávio, Rafa, Pai, Mãe"
-                  className="w-full text-xs font-medium px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  className="w-full text-base sm:text-xs font-medium px-3 py-2.5 sm:py-2 bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              <label htmlFor="add-member-email" className="block text-[11px] font-bold text-slate-700 mb-1">
                 E-mail (opcional para crianças, necessário para acesso)
               </label>
               <input
+                id="add-member-email"
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder="exemplo@email.com"
-                className="w-full text-xs font-medium px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                className="w-full text-base sm:text-xs font-medium px-3 py-2.5 sm:py-2 bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
               />
             </div>
 
-            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pt-1">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+              <div className="flex items-center gap-2 flex-wrap">
                 <select
+                  aria-label="Papel do novo membro"
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as MemberRole)}
-                  className="text-xs font-semibold bg-white rounded-lg px-2.5 py-2 border border-slate-200 text-slate-700 cursor-pointer"
+                  className="text-base sm:text-xs font-semibold bg-white rounded-xl px-3 py-2 border border-slate-200 text-slate-700 cursor-pointer"
                 >
                   <option value="CHILD">Criança</option>
                   <option value="ADMIN">Adulto (Admin)</option>
                   <option value="MEMBER">Adulto (Membro)</option>
                 </select>
 
-                <div className="flex items-center gap-1.5 shrink-0 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-1.5 shrink-0 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200">
                   <span className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: newColor }} />
                   <select
+                    aria-label="Cor do novo membro"
                     value={newColor}
                     onChange={(e) => setNewColor(e.target.value)}
-                    className="text-xs bg-transparent text-slate-700 border-none outline-none cursor-pointer"
+                    className="text-base sm:text-xs bg-transparent text-slate-700 border-none outline-none cursor-pointer"
                   >
                     {COLOR_PALETTE.map((c) => (
                       <option key={c} value={c}>
@@ -600,7 +620,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
               <button
                 type="submit"
                 disabled={isAddingMember || !newName.trim()}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
               >
                 {isAddingMember ? 'Adicionando...' : '+ Adicionar Membro'}
               </button>
@@ -746,33 +766,33 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
 
               {/* Seletor de Forma de Pagamento */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                   Forma de Pagamento (Gateway Asaas)
-                </label>
-                <div className="grid grid-cols-2 gap-3">
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('PIX')}
-                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    className={`min-h-[44px] p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       paymentMethod === 'PIX'
                         ? 'border-emerald-600 bg-emerald-50 text-emerald-900 shadow-2xs'
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <QrCode className="w-4 h-4 text-emerald-600" />
+                    <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Pix Instantâneo (QR Code)</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('CREDIT_CARD')}
-                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    className={`min-h-[44px] p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       paymentMethod === 'CREDIT_CARD'
                         ? 'border-indigo-600 bg-indigo-50 text-indigo-900 shadow-2xs'
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <CreditCard className="w-4 h-4 text-indigo-600" />
+                    <CreditCard className="w-4 h-4 text-indigo-600 shrink-0" />
                     <span>Cartão de Crédito Recorrente</span>
                   </button>
                 </div>
@@ -837,11 +857,11 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
         </div>
 
         {/* Rodapé do Modal */}
-        <div className="pt-4 border-t border-slate-100 flex justify-end">
+        <div className="pt-3.5 border-t border-slate-100 flex justify-end shrink-0 pb-[env(safe-area-inset-bottom,0px)]">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+            className="min-h-[44px] px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
           >
             Fechar
           </button>

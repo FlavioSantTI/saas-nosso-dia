@@ -322,7 +322,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500"
+            className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500"
             aria-expanded={mobileMenuOpen}
             aria-label={mobileMenuOpen ? 'Fechar menu de navegação' : 'Abrir menu de navegação'}
           >
@@ -375,7 +375,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <button
                 type="button"
                 onClick={handleLoginClick}
-                className="w-full py-2.5 text-center text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                className="w-full min-h-[44px] py-2.5 text-center text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
               >
                 Já sou cadastrado (Entrar)
               </button>
@@ -385,7 +385,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   setMobileMenuOpen(false);
                   handleHeroCtaClick();
                 }}
-                className="w-full py-2.5 text-center text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full min-h-[44px] py-2.5 text-center text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
                 <span>Experimente grátis por 14 dias</span>
                 <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
@@ -402,82 +402,82 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <section
           ref={heroRef}
           aria-labelledby="hero-heading"
-          className="relative pt-10 pb-16 sm:pt-16 sm:pb-24 overflow-hidden"
+          className="relative pt-8 pb-14 sm:pt-16 sm:pb-24 overflow-hidden"
         >
           {/* Fundo suave com degradê sutil */}
           <div className="absolute inset-0 bg-gradient-to-b from-sky-50/50 via-[#F4F8FA] to-[#F4F8FA] pointer-events-none -z-10" />
 
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
               {/* Coluna Texto / Copy do Hero */}
-              <div className="lg:col-span-7 text-center lg:text-left space-y-5">
+              <div className="lg:col-span-7 text-center lg:text-left space-y-4 sm:space-y-5 min-w-0">
                 {/* HeroBadge */}
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-100/90 border border-sky-200 text-sky-800 text-xs font-bold shadow-2xs">
-                  <Sparkles className="w-3.5 h-3.5 text-sky-700" aria-hidden="true" />
-                  <span>A central inteligente da rotina familiar</span>
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-sky-100/90 border border-sky-200 text-sky-800 text-[11px] sm:text-xs font-bold shadow-2xs max-w-full">
+                  <Sparkles className="w-3.5 h-3.5 text-sky-700 shrink-0" aria-hidden="true" />
+                  <span className="truncate">A central inteligente da rotina familiar</span>
                 </div>
 
                 {/* Título Principal Único (h1) */}
                 <h1
                   id="hero-heading"
-                  className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-[1.15]"
+                  className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-[1.18] break-words"
                 >
                   Sua família sabe exatamente o que acontece esta semana?
                 </h1>
 
                 {/* Subtítulo */}
-                <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-normal">
+                <p className="text-sm sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-normal">
                   Chega de desencontros e sobrecarga. Organize atividades escolares, treinos e
                   caronas em uma visão semanal clara, com responsáveis definidos.
                 </p>
 
                 {/* CTA Primário & Microcopy */}
-                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
+                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-center lg:justify-start gap-3 sm:gap-4">
                   <button
                     type="button"
                     onClick={handleHeroCtaClick}
-                    className="w-full sm:w-auto px-7 py-3.5 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-sm rounded-2xl shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 transform active:scale-95"
+                    className="w-full sm:w-auto min-h-[48px] px-5 sm:px-7 py-3.5 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-sm rounded-2xl shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 transform active:scale-95"
                   >
                     <span>Experimente grátis por 14 dias</span>
-                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                    <ArrowRight className="w-4 h-4 shrink-0" aria-hidden="true" />
                   </button>
 
                   <button
                     type="button"
                     onClick={handleLoginClick}
-                    className="w-full sm:w-auto px-5 py-3.5 text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 font-bold text-xs rounded-2xl transition-all cursor-pointer shadow-2xs"
+                    className="w-full sm:w-auto min-h-[48px] px-5 py-3.5 text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 font-bold text-xs rounded-2xl transition-all cursor-pointer shadow-2xs"
                   >
                     Acessar minha conta
                   </button>
                 </div>
 
                 {/* Microcopy Acolhedor */}
-                <div className="flex items-center justify-center lg:justify-start gap-2 text-xs font-semibold text-slate-500">
+                <div className="flex items-center justify-center lg:justify-start gap-2 text-xs font-semibold text-slate-600 flex-wrap">
                   <Smartphone className="w-3.5 h-3.5 text-emerald-700 shrink-0" aria-hidden="true" />
                   <span>Sem cartão de crédito · Instale no celular como app (PWA)</span>
                 </div>
               </div>
 
               {/* Coluna Visual Hero: Card da Grade Semanal Ilustrativa */}
-              <div className="lg:col-span-5 relative">
-                <div className="relative mx-auto max-w-md lg:max-w-none">
+              <div className="lg:col-span-5 relative min-w-0 w-full">
+                <div className="relative mx-auto w-full max-w-sm sm:max-w-md lg:max-w-none">
                   {/* Card Ilustrativo da Grade Semanal */}
-                  <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-xl border border-sky-100 relative z-10 transition-transform duration-300 hover:shadow-2xl">
+                  <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border border-sky-100 relative z-10 transition-transform duration-300 hover:shadow-2xl">
                     {/* Header do Card Ilustrativo */}
-                    <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-700 font-bold text-sm">
+                    <div className="flex items-center justify-between gap-2 pb-3.5 border-b border-slate-100 flex-wrap">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-700 font-bold text-sm shrink-0">
                           <CalendarDays className="w-5 h-5 text-sky-700" aria-hidden="true" />
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-900">Nossa Semana em Foco</p>
-                          <p className="text-[11px] font-medium text-slate-400">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate">Nossa Semana em Foco</p>
+                          <p className="text-[11px] font-medium text-slate-500 truncate">
                             Segunda a Sexta · 4 membros
                           </p>
                         </div>
                       </div>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-700" aria-hidden="true" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-700 shrink-0" aria-hidden="true" />
                         Tudo alinhado
                       </span>
                     </div>
@@ -486,19 +486,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <div className="mt-4 space-y-3">
                       {/* Atividade 1 */}
                       <div className="p-3 rounded-2xl bg-sky-50/60 border border-sky-100 transition-colors">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-1">
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-sky-600" />
-                            Atividade 1 — Escola (Entrada)
+                        <div className="flex items-center justify-between gap-2 text-xs font-bold text-slate-800 mb-1 flex-wrap">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-2 h-2 rounded-full bg-sky-600 shrink-0" />
+                            <span className="truncate">Atividade 1 — Escola (Entrada)</span>
                           </span>
-                          <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-400" aria-hidden="true" />
+                          <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3 text-slate-500" aria-hidden="true" />
                             07:30
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                        <div className="flex items-center justify-between gap-1.5 text-[11px] text-slate-600 pt-1 flex-wrap">
                           <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3 text-slate-400" aria-hidden="true" />
+                            <MapPin className="w-3 h-3 text-slate-500 shrink-0" aria-hidden="true" />
                             Colégio Principal
                           </span>
                           <span className="font-semibold text-sky-800 bg-white px-2 py-0.5 rounded-lg border border-sky-100">
@@ -509,19 +509,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                       {/* Atividade 2 */}
                       <div className="p-3 rounded-2xl bg-amber-50/60 border border-amber-100 transition-colors">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-1">
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-amber-600" />
-                            Atividade 2 — Treino Esportivo
+                        <div className="flex items-center justify-between gap-2 text-xs font-bold text-slate-800 mb-1 flex-wrap">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-2 h-2 rounded-full bg-amber-600 shrink-0" />
+                            <span className="truncate">Atividade 2 — Treino Esportivo</span>
                           </span>
-                          <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-400" aria-hidden="true" />
+                          <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3 text-slate-500" aria-hidden="true" />
                             15:30
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                        <div className="flex items-center justify-between gap-1.5 text-[11px] text-slate-600 pt-1 flex-wrap">
                           <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3 text-slate-400" aria-hidden="true" />
+                            <MapPin className="w-3 h-3 text-slate-500 shrink-0" aria-hidden="true" />
                             Clube / Ginásio
                           </span>
                           <span className="font-semibold text-amber-900 bg-white px-2 py-0.5 rounded-lg border border-amber-100">
@@ -532,19 +532,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                       {/* Atividade 3 */}
                       <div className="p-3 rounded-2xl bg-emerald-50/60 border border-emerald-100 transition-colors">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-1">
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                            Atividade 3 — Natação Infantil
+                        <div className="flex items-center justify-between gap-2 text-xs font-bold text-slate-800 mb-1 flex-wrap">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
+                            <span className="truncate">Atividade 3 — Natação Infantil</span>
                           </span>
-                          <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-400" aria-hidden="true" />
+                          <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3 text-slate-500" aria-hidden="true" />
                             18:00
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                        <div className="flex items-center justify-between gap-1.5 text-[11px] text-slate-600 pt-1 flex-wrap">
                           <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3 text-slate-400" aria-hidden="true" />
+                            <MapPin className="w-3 h-3 text-slate-500 shrink-0" aria-hidden="true" />
                             Academia Aquática
                           </span>
                           <span className="font-semibold text-emerald-800 bg-white px-2 py-0.5 rounded-lg border border-emerald-100">
@@ -555,12 +555,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
 
                     {/* Rodapé do Card Ilustrativo */}
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-600 flex-wrap">
                       <span className="flex items-center gap-1 text-slate-600 font-medium">
-                        <HeartHandshake className="w-3.5 h-3.5 text-sky-600" aria-hidden="true" />
+                        <HeartHandshake className="w-3.5 h-3.5 text-sky-600 shrink-0" aria-hidden="true" />
                         Logística compartilhada com tranquilidade
                       </span>
-                      <span className="font-bold text-sky-700">0 conflitos</span>
+                      <span className="font-bold text-sky-700 shrink-0">0 conflitos</span>
                     </div>
                   </div>
 
