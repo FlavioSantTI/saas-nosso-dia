@@ -1,8 +1,9 @@
 import React from 'react';
 import { EventItem } from '../types';
-import { Clock, MapPin, User, Bell, AlertTriangle } from 'lucide-react';
+import { Clock, MapPin, Bell, AlertTriangle } from 'lucide-react';
 import { getMemberDisplayName } from '../lib/formatters';
 import { extractLiteralTime } from '../lib/dateUtils';
+import { MemberAvatar } from './MemberAvatar';
 
 interface ActivityCardProps {
   event: EventItem;
@@ -88,10 +89,11 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
             {event.participants.map((p) => (
               <span
                 key={p.id}
-                className="inline-flex items-center px-2.5 py-1 rounded-lg text-caption font-bold text-white shadow-2xs"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-caption font-bold text-white shadow-2xs"
                 style={{ backgroundColor: p.color }}
               >
-                {getMemberDisplayName(p)}
+                {p.avatar && <MemberAvatar member={p} size="xs" className="!w-3 !h-3 rounded-xs" />}
+                <span>{getMemberDisplayName(p)}</span>
               </span>
             ))}
           </div>
@@ -103,7 +105,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
         <span className="text-slate-600 font-semibold text-caption">Responsável:</span>
         {event.responsible ? (
           <span className="font-bold text-slate-800 flex items-center gap-1.5 text-caption">
-            <User className="w-3.5 h-3.5 text-sky-700 shrink-0" />
+            <MemberAvatar member={event.responsible} size="xs" />
             <span>{getMemberDisplayName(event.responsible)}</span>
           </span>
         ) : (

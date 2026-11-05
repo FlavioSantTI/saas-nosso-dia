@@ -20,6 +20,7 @@ export interface FamilyMember {
   user_id?: string | null;
   name: string;
   nickname?: string | null;
+  avatar?: string | null;
   email?: string | null;
   role: MemberRole;
   color: string;
@@ -134,6 +135,7 @@ export interface DailyBriefingParticipant {
   id: string;
   name: string;
   color: string;
+  avatar?: string | null;
   role?: MemberRole;
 }
 
@@ -151,6 +153,7 @@ export interface DailyBriefingItem {
   responsible_id: string | null;
   responsible_name: string | null;
   responsible_color: string | null;
+  responsible_avatar?: string | null;
   participants: DailyBriefingParticipant[];
   has_conflict: boolean;
 }

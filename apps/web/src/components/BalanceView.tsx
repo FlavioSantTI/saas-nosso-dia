@@ -3,6 +3,7 @@ import { EventItem, FamilyMember } from '../types';
 import { getMemberDisplayName } from '../lib/formatters';
 import { extractLiteralDate, extractLiteralTime, toLocalDateString } from '../lib/dateUtils';
 import { getMonday } from './CalendarNavigation';
+import { MemberAvatar } from './MemberAvatar';
 import {
   BarChart3,
   Scale,
@@ -162,11 +163,8 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
         {/* Legenda Informativa com Porcentagens */}
         <div className="flex flex-wrap items-center gap-4 pt-1 text-xs">
           {adultStats.map(({ member, count, percentage }) => (
-            <div key={member.id} className="flex items-center gap-2">
-              <span
-                className="w-3 h-3 rounded-full shadow-2xs shrink-0"
-                style={{ backgroundColor: member.color }}
-              />
+            <div key={member.id} className="flex items-center gap-1.5">
+              <MemberAvatar member={member} size="xs" />
               <span className="text-slate-900 font-bold">{getMemberDisplayName(member)}:</span>
               <span className="text-slate-600 font-semibold">
                 {count} missões ({percentage}%)
@@ -194,12 +192,7 @@ export const BalanceView: React.FC<BalanceViewProps> = ({
           >
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <div
-                  className="w-8 h-8 rounded-xl text-white font-bold text-xs flex items-center justify-center shadow-xs"
-                  style={{ backgroundColor: member.color }}
-                >
-                  {member.name.charAt(0).toUpperCase()}
-                </div>
+                <MemberAvatar member={member} size="md" />
                 <div>
                   <h3 className="font-bold text-sm text-slate-900">{getMemberDisplayName(member)}</h3>
                   <p className="text-[11px] text-slate-400 font-medium">

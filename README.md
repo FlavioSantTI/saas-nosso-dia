@@ -57,8 +57,8 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
 - **Balanço da Semana:** Análise da distribuição de carga e responsabilidades entre os adultos da casa.
 
 ### 👨‍👩‍👧‍👦 4. Gestão Familiar & Membros Multi-Tenant
-- **Cores Distintivas por Membro:** Cada participante possui sua cor de identificação rápida (ex.: Flávio em Azul Oceano, Silvia em Terracota, Rafael em Verde Sálvia).
-- **Filtro Rápido por Pessoa:** Filtre a grade com 1 clique para ver a agenda de um filho ou de toda a família.
+- **Cores & Ícones de Avatar por Membro:** Cada participante possui sua cor de identificação e um ícone de avatar personalizável selecionado da biblioteca Font Awesome Free (Família, Crianças, Esportes, Natureza e Símbolos), com fallback limpo para a inicial do nome.
+- **Filtro Rápido por Pessoa:** Filtre a grade com 1 clique para ver a agenda de um filho ou de toda a família com avatares em miniatura de alta definição.
 - **Convite Dinâmico:** Link de convite gerado dinamicamente para o domínio atual (`window.location.origin`), pronto para WhatsApp.
 - **Perfis Gerenciados vs Adultos:** Dependentes/crianças não necessitam de login; adultos possuem gestão de permissões.
 
@@ -207,6 +207,21 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ### [v2.3.0] — 2026-11-04
+#### 👤 Ícones e Avatares de Perfil com Font Awesome Free (`MemberAvatar.tsx`, `AvatarPickerModal.tsx`, `avatars.ts`)
+- **Biblioteca Vetorial Embutida (Zero Dependências Extras):**
+  - Integração de 20 ícones populares e amigáveis do Font Awesome Free organizados por categorias: *Pessoas & Família* (user, smile, baby, glasses, graduation-cap), *Lazer & Natureza* (heart, star, paw, leaf, sun, moon), *Esportes & Aventura* (futbol, basketball, bicycle, person-swimming, skate) e *Símbolos & Criatividade* (crown, rocket, palette, music).
+  - Ícones renderizados como caminhos SVG puros (`path d="..."`) diretamente embutidos, sem aumentar o peso do bundle com pacotes npm pesados.
+- **Seletor de Avatar Acolhedor (`AvatarPickerModal.tsx`):**
+  - Modal interativo na gestão da família (`FamilyManageModal.tsx`) permitindo trocar o avatar do membro ou optar pela inicial padrão com 1 clique.
+  - Grade visual com pré-visualização em tempo real na cor correspondente do membro.
+- **Componente Reutilizável de Alta Resolução (`MemberAvatar.tsx`):**
+  - Suporte a múltiplos tamanhos (`xs` 16px, `sm` 24px, `md` 32px, `lg` 40px, `xl` 48px).
+  - Integrado de forma perfeitamente harmônica e responsiva em todos os pontos do app: Cabeçalho (`Header.tsx`), Barra de Filtro de Membros (`App.tsx`), Cards de Atividades (`ActivityCard.tsx`), Balanço Semanal (`BalanceView.tsx`) e Resumo Diário (`DailyBriefingCard.tsx`).
+  - Preservação estrita de dimensões e alinhamentos de UI/UX, sem quebras de layout ou desalinhamentos mobile.
+- **Migration Supabase & Resiliência a Nível de Banco (`20261105000001_add_avatar_to_family_members.sql`):**
+  - Adição da coluna `avatar TEXT DEFAULT NULL` na tabela `family_members`.
+  - Tratamento resiliente no client: caso a coluna ainda não exista no banco remoto, a gravação de membros ocorre normalmente com fallback automático.
+
 #### 🔄 Sistema de Atualização Híbrida Inteligente do PWA (`usePwaUpdate.ts`, `vite.config.ts` e `App.tsx`)
 - **Detecção Dupla por Versão + Timestamp de Build (`__APP_BUILD_TIME__`):**
   - O `vite.config.ts` injeta a constante global `__APP_BUILD_TIME__` no bundle e grava o mesmo timestamp em `/public/version.json`.

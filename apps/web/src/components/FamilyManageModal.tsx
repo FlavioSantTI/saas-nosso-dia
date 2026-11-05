@@ -4,6 +4,8 @@ import { getFamilyInviteUrl } from '../lib/url';
 import { createSubscription, formatCentsToBRL } from '../lib/asaas';
 import { supabase } from '../lib/supabase';
 import { CreditCard, Users, ShieldCheck, CheckCircle2, Sparkles, QrCode, ArrowRight } from 'lucide-react';
+import { MemberAvatar } from './MemberAvatar';
+import { AvatarPickerModal } from './AvatarPickerModal';
 
 interface FamilyManageModalProps {
   isOpen: boolean;
@@ -11,7 +13,7 @@ interface FamilyManageModalProps {
   family: Family;
   members: FamilyMember[];
   onUpdateFamily: (name: string) => Promise<void>;
-  onAddMember: (member: { name: string; nickname?: string | null; email?: string | null; role: MemberRole; color: string }) => Promise<void>;
+  onAddMember: (member: { name: string; nickname?: string | null; avatar?: string | null; email?: string | null; role: MemberRole; color: string }) => Promise<void>;
   onUpdateMember: (member: FamilyMember) => Promise<void>;
   onDeleteMember: (memberId: string) => Promise<void>;
   onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -90,6 +92,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   // Estado para novo membro
   const [newName, setNewName] = useState('');
   const [newNickname, setNewNickname] = useState('');
+  const [newAvatar, setNewAvatar] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<MemberRole>('CHILD');
   const [newColor, setNewColor] = useState(COLOR_PALETTE[0]);
@@ -101,6 +104,14 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   );
   const [savingMemberId, setSavingMemberId] = useState<string | null>(null);
   const [invitingMemberId, setInvitingMemberId] = useState<string | null>(null);
+
+  // Estado para abrir o AvatarPickerModal para um membro ou para o novo membro
+  const [avatarPickerTarget, setAvatarPickerTarget] = useState<{
+    memberId: string | 'new';
+    color: string;
+    name: string;
+    avatar: string | null;
+  } | null>(null);
 
   // Aba ativa do modal: 'members' ou 'billing'
   const [modalTab, setModalTab] = useState<'members' | 'billing'>('members');
@@ -188,12 +199,14 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
       await onAddMember({
         name: newName.trim(),
         nickname: newNickname.trim() || null,
+        avatar: newAvatar,
         email: newEmail.trim() || null,
         role: newRole,
         color: newColor,
       });
       setNewName('');
       setNewNickname('');
+      setNewAvatar(null);
       setNewEmail('');
     } catch (err) {
       console.error(err);
@@ -403,6 +416,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                 const hasChanged =
                   current.name !== m.name ||
                   (current.nickname || '') !== (m.nickname || '') ||
+                  (current.avatar || '') !== (m.avatar || '') ||
                   (current.email || '') !== (m.email || '') ||
                   current.role !== m.role ||
                   current.color !== m.color;
@@ -413,12 +427,24 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                     className="p-3.5 bg-white rounded-2xl border border-slate-200 hover:border-slate-300 flex flex-col gap-3 transition-all shadow-2xs"
                   >
                     <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
-                      {/* Seletor de Cor */}
+                      {/* Seletor de Avatar & Cor */}
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span
-                          className="w-4 h-4 rounded-full shadow-xs shrink-0"
-                          style={{ backgroundColor: current.color }}
-                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAvatarPickerTarget({
+                              memberId: m.id,
+                              color: current.color,
+                              name: current.nickname || current.name,
+                              avatar: current.avatar || null,
+                            })
+                          }
+                          className="p-1 rounded-xl border border-slate-200 hover:border-sky-400 hover:ring-2 hover:ring-sky-100 transition-all cursor-pointer bg-white"
+                          title="Escolher ícone do membro"
+                          aria-label={`Escolher ícone de ${current.name}`}
+                        >
+                          <MemberAvatar member={current} size="sm" />
+                        </button>
                         <select
                           aria-label={`Cor de ${current.name}`}
                           value={current.color}
@@ -600,8 +626,25 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                   <option value="MEMBER">Adulto (Membro)</option>
                 </select>
 
-                <div className="flex items-center gap-1.5 shrink-0 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200">
-                  <span className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: newColor }} />
+                <div className="flex items-center gap-1.5 shrink-0 bg-white px-2 py-1 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAvatarPickerTarget({
+                        memberId: 'new',
+                        color: newColor,
+                        name: newNickname || newName || 'Novo Membro',
+                        avatar: newAvatar,
+                      })
+                    }
+                    className="p-1 rounded-lg hover:ring-2 hover:ring-sky-200 transition-all cursor-pointer"
+                    title="Escolher ícone do novo membro"
+                  >
+                    <MemberAvatar
+                      member={{ name: newNickname || newName || 'Novo', color: newColor, avatar: newAvatar }}
+                      size="xs"
+                    />
+                  </button>
                   <select
                     aria-label="Cor do novo membro"
                     value={newColor}
@@ -867,6 +910,23 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Modal Seletor de Ícones Font Awesome */}
+      <AvatarPickerModal
+        isOpen={!!avatarPickerTarget}
+        onClose={() => setAvatarPickerTarget(null)}
+        selectedAvatarId={avatarPickerTarget?.avatar}
+        memberColor={avatarPickerTarget?.color || '#0284C7'}
+        memberName={avatarPickerTarget?.name || 'Membro'}
+        onSelectAvatar={(avatarId) => {
+          if (!avatarPickerTarget) return;
+          if (avatarPickerTarget.memberId === 'new') {
+            setNewAvatar(avatarId);
+          } else {
+            handleMemberFieldChange(avatarPickerTarget.memberId, 'avatar', avatarId);
+          }
+        }}
+      />
     </div>
   );
 };

@@ -18,6 +18,7 @@ import { Toast, ToastItem, ToastType } from './components/Toast';
 import { BottomNavBar, BottomNavTab } from './components/BottomNavBar';
 import { BalanceView } from './components/BalanceView';
 import { Onboarding } from './components/Onboarding';
+import { MemberAvatar } from './components/MemberAvatar';
 import { supabase } from './lib/supabase';
 import { startNotificationScheduler, requestNotificationPermission } from './lib/notifications';
 import { getMemberDisplayName } from './lib/formatters';
@@ -1039,23 +1040,39 @@ export const App: React.FC = () => {
   const handleAddMember = async (memberData: {
     name: string;
     nickname?: string | null;
+    avatar?: string | null;
     email?: string | null;
     role: MemberRole;
     color: string;
   }) => {
     if (!family) return;
-    const { data: newMember, error } = await supabase
+    const payload: any = {
+      family_id: family.id,
+      name: memberData.name,
+      nickname: memberData.nickname?.trim() || null,
+      avatar: memberData.avatar || null,
+      email: memberData.email?.trim() || null,
+      role: memberData.role,
+      color: memberData.color
+    };
+
+    let { data: newMember, error } = await supabase
       .from('family_members')
-      .insert({
-        family_id: family.id,
-        name: memberData.name,
-        nickname: memberData.nickname?.trim() || null,
-        email: memberData.email?.trim() || null,
-        role: memberData.role,
-        color: memberData.color
-      })
+      .insert(payload)
       .select()
       .single();
+
+    // Fallback gracioso se a coluna avatar não existir no schema do banco
+    if (error && String(error.message).includes('avatar')) {
+      const { avatar, ...fallbackPayload } = payload;
+      const { data: fbMember, error: fbError } = await supabase
+        .from('family_members')
+        .insert(fallbackPayload)
+        .select()
+        .single();
+      newMember = fbMember ? { ...fbMember, avatar: memberData.avatar || null } : null;
+      error = fbError;
+    }
 
     if (error) {
       alert(`Erro ao adicionar membro: ${error.message}`);
@@ -1066,16 +1083,29 @@ export const App: React.FC = () => {
 
   // Gestão de Família: Atualizar Membro
   const handleUpdateMember = async (updatedMember: FamilyMember) => {
-    const { error } = await supabase
+    const payload: any = {
+      name: updatedMember.name,
+      nickname: updatedMember.nickname?.trim() || null,
+      avatar: updatedMember.avatar || null,
+      email: updatedMember.email?.trim() || null,
+      role: updatedMember.role,
+      color: updatedMember.color
+    };
+
+    let { error } = await supabase
       .from('family_members')
-      .update({
-        name: updatedMember.name,
-        nickname: updatedMember.nickname?.trim() || null,
-        email: updatedMember.email?.trim() || null,
-        role: updatedMember.role,
-        color: updatedMember.color
-      })
+      .update(payload)
       .eq('id', updatedMember.id);
+
+    // Fallback gracioso se a coluna avatar não existir no schema do banco
+    if (error && String(error.message).includes('avatar')) {
+      const { avatar, ...fallbackPayload } = payload;
+      const { error: fbError } = await supabase
+        .from('family_members')
+        .update(fallbackPayload)
+        .eq('id', updatedMember.id);
+      error = fbError;
+    }
 
     if (error) {
       alert(`Erro ao atualizar membro: ${error.message}`);
@@ -1803,8 +1833,8 @@ export const App: React.FC = () => {
                       }`}
                       style={{ backgroundColor: selectedMemberId === m.id ? m.color : undefined }}
                     >
-                      <span className="w-2.5 h-2.5 rounded-full shadow-2xs" style={{ backgroundColor: m.color }} />
-                      {getMemberDisplayName(m)}
+                      <MemberAvatar member={m} size="xs" />
+                      <span>{getMemberDisplayName(m)}</span>
                     </button>
                   ))}
                 </div>

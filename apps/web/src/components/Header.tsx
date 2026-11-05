@@ -20,6 +20,7 @@ import {
   Search
 } from 'lucide-react';
 import { APP_VERSION } from '../constants/version';
+import { MemberAvatar } from './MemberAvatar';
 
 interface HeaderProps {
   family: Family;
@@ -219,12 +220,11 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Opções da Conta e Família"
                 aria-label="Opções da Conta"
               >
-                <div
-                  className="w-7 h-7 sm:w-6 sm:h-6 rounded-lg text-white font-bold text-xs flex items-center justify-center shadow-xs"
-                  style={{ backgroundColor: memberColor }}
-                >
-                  {firstName.charAt(0).toUpperCase()}
-                </div>
+                <MemberAvatar
+                  member={currentMember || { name: firstName, color: memberColor }}
+                  size="sm"
+                  fallbackLetter={firstName.charAt(0).toUpperCase()}
+                />
                 <span className="text-xs font-bold text-slate-800 hidden sm:inline max-w-[100px] truncate">
                   {firstName}
                 </span>
@@ -234,18 +234,24 @@ export const Header: React.FC<HeaderProps> = ({
               {/* Dropdown do Usuário com Versão, Super-Admin e Créditos */}
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-                  <div className="p-2.5 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-900 truncate">
-                      {rawDisplayName}
-                    </p>
-                    <p className="text-[11px] text-slate-500 truncate">
-                      {currentUser?.email || family.name}
-                    </p>
-                    {currentMember && (
-                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100">
-                        {currentMember.role === 'ADMIN' ? 'Administrador' : 'Membro'}
-                      </span>
-                    )}
+                  <div className="p-2.5 border-b border-slate-100 flex items-center gap-2.5">
+                    <MemberAvatar
+                      member={currentMember || { name: rawDisplayName, color: memberColor }}
+                      size="md"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-900 truncate">
+                        {rawDisplayName}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {currentUser?.email || family.name}
+                      </p>
+                      {currentMember && (
+                        <span className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-sky-50 text-sky-700 border border-sky-100">
+                          {currentMember.role === 'ADMIN' ? 'Administrador' : 'Membro'}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="py-1 space-y-0.5">

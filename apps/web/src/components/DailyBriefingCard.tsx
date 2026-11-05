@@ -30,6 +30,7 @@ import {
   Undo2,
   Search
 } from 'lucide-react';
+import { MemberAvatar } from './MemberAvatar';
 
 interface DailyBriefingCardProps {
   familyId?: string;
@@ -143,6 +144,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             id: String(p.id),
             name: String(p.nickname || p.name),
             color: String(p.color || '#0284C7'),
+            avatar: p.avatar || null,
             role: p.role
           }));
         } else if (Array.isArray(e.event_participants)) {
@@ -152,6 +154,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
               id: String(m.id || ep.member_id),
               name: String(m.nickname || m.name || 'Membro'),
               color: String(m.color || '#0284C7'),
+              avatar: m.avatar || null,
               role: m.role
             };
           });
@@ -171,6 +174,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
           responsible_id: e.responsible_id || null,
           responsible_name: resp ? (resp.nickname || resp.name) : null,
           responsible_color: resp?.color || null,
+          responsible_avatar: resp?.avatar || null,
           participants,
           has_conflict: false
         };
@@ -536,10 +540,11 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
                         {item.participants.map((p) => (
                           <span
                             key={p.id}
-                            className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold text-white shadow-2xs"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-white shadow-2xs"
                             style={{ backgroundColor: p.color }}
                           >
-                            {p.name}
+                            {p.avatar && <MemberAvatar member={p} size="xs" className="!w-3 !h-3 rounded-xs" />}
+                            <span>{p.name}</span>
                           </span>
                         ))}
                       </div>
@@ -549,14 +554,26 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
 
                 <div className="text-xs flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
                   <div className="flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-slate-500" />
-                    <span className="text-slate-600">Responsável:</span>
                     {item.responsible_name ? (
-                      <strong className="text-slate-800">{item.responsible_name}</strong>
+                      <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                        <MemberAvatar
+                          member={{
+                            name: item.responsible_name,
+                            color: item.responsible_color || '#0284C7',
+                            avatar: item.responsible_avatar
+                          }}
+                          size="xs"
+                        />
+                        <span>{item.responsible_name}</span>
+                      </div>
                     ) : (
-                      <span className="text-amber-800 bg-amber-100 font-bold px-1.5 py-0.5 rounded text-[10px]">
-                        Definir
-                      </span>
+                      <>
+                        <User className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="text-slate-600">Responsável:</span>
+                        <span className="text-amber-800 bg-amber-100 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                          Definir
+                        </span>
+                      </>
                     )}
                   </div>
 
