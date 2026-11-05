@@ -24,7 +24,7 @@ import { getMemberDisplayName } from './lib/formatters';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { LandingPage } from './components/LandingPage';
 import { sanitizeTitle } from './lib/sanitize';
-import { usePwaUpdate } from './lib/usePwaUpdate';
+import { usePwaUpdate, consumeJustUpdatedVersion } from './lib/usePwaUpdate';
 import {
   extractLiteralDate,
   extractLiteralTime,
@@ -376,7 +376,6 @@ const syncFutureRoutinesInBackground = async (familyId: string, routines: any[])
 };
 
 export const App: React.FC = () => {
-  const { hasUpdate, latestVersion, reloadApp } = usePwaUpdate();
   const [family, setFamilyState] = useState<Family | null>(null);
   const familyRef = useRef<Family | null>(null);
   const setFamily = useCallback((f: Family | null | ((prev: Family | null) => Family | null)) => {
@@ -425,6 +424,27 @@ export const App: React.FC = () => {
       window.location.search.includes('admin=true')
     );
   });
+
+  // Verifica se algum modal/formulário está aberto para não interromper o usuário com auto-reload
+  const isUserBusy =
+    isQuickAddOpen ||
+    isManualAddOpen ||
+    isEditModalOpen ||
+    isManageFamilyOpen ||
+    isAuthModalOpen ||
+    isSummaryModalOpen ||
+    isSearchOpen ||
+    isUnassignedModalOpen ||
+    isAdminViewOpen;
+
+  const {
+    hasUpdate,
+    isDismissed,
+    isAutoUpdating,
+    latestVersion,
+    reloadApp,
+    dismissUpdate
+  } = usePwaUpdate({ isBusy: isUserBusy });
 
   const handleOpenAdmin = useCallback(() => {
     setIsAdminViewOpen(true);
@@ -504,6 +524,14 @@ export const App: React.FC = () => {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Notifica o usuário com um Toast acolhedor logo após uma atualização do PWA ser concluída
+  useEffect(() => {
+    const updatedTo = consumeJustUpdatedVersion();
+    if (updatedTo) {
+      showToast(`🎉 Nosso Dia atualizado (v${updatedTo})! Você já está usando a versão mais recente.`, 'success');
+    }
+  }, [showToast]);
 
   // Navegação Temporal
   const handlePrevDate = () => {
@@ -1987,23 +2015,49 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* Banner Flutuante de Atualização PWA na Zona do Polegar */}
-      {hasUpdate && (
-        <div className="fixed bottom-20 sm:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-800 z-50 flex items-center justify-between gap-3 animate-slide-up">
+      {/* Overlay de Auto-Atualização Silenciosa (quando o usuário abre/retoma o app sem modal aberto) */}
+      {isAutoUpdating && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[70] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3.5 max-w-sm w-full">
+            <div className="w-5 h-5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin shrink-0" />
+            <div className="min-w-0">
+              <p className="font-bold text-sm text-white truncate">
+                ✨ Atualizando o Nosso Dia (v{latestVersion})...
+              </p>
+              <p className="text-xs text-slate-300 truncate">
+                Aplicando melhorias recentes automaticamente.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Banner Flutuante de Atualização PWA na Zona do Polegar (quando o usuário está ocupado ou em uso ativo) */}
+      {hasUpdate && !isDismissed && !isAutoUpdating && (
+        <div className="fixed bottom-20 sm:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:w-[420px] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-800 z-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="text-xl shrink-0">🚀</span>
             <div className="min-w-0">
-              <p className="font-bold text-xs truncate">Nova versão disponível (v{latestVersion})!</p>
+              <p className="font-bold text-xs truncate">Nova atualização disponível (v{latestVersion})!</p>
               <p className="text-[11px] text-slate-400 truncate">Toque para carregar as melhorias recentes.</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={reloadApp}
-            className="px-3.5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
-          >
-            Atualizar
-          </button>
+          <div className="flex items-center justify-end gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={dismissUpdate}
+              className="px-3 py-2 min-h-[38px] bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+            >
+              Depois
+            </button>
+            <button
+              type="button"
+              onClick={reloadApp}
+              className="px-3.5 py-2 min-h-[38px] bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              Atualizar agora
+            </button>
+          </div>
         </div>
       )}
     </div>

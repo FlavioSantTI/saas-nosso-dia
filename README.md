@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v2.2.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v2.3.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -205,6 +205,18 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v2.3.0] — 2026-11-04
+#### 🔄 Sistema de Atualização Híbrida Inteligente do PWA (`usePwaUpdate.ts`, `vite.config.ts` e `App.tsx`)
+- **Detecção Dupla por Versão + Timestamp de Build (`__APP_BUILD_TIME__`):**
+  - O `vite.config.ts` injeta a constante global `__APP_BUILD_TIME__` no bundle e grava o mesmo timestamp em `/public/version.json`.
+  - O `usePwaUpdate.ts` detecta tanto mudanças semânticas de versão (`version !== APP_VERSION`) quanto novos deploys de hotfix/build (`remoteBuildTime > currentBuildTime`), com proteção anti-loop via assinatura em `sessionStorage`.
+- **Auto-Atualização Silenciosa ao Abrir/Retomar (`mount` / `visibilitychange`):**
+  - Quando o usuário abre o app ou desbloqueia o celular e **não está com nenhum modal/formulário aberto** (`!isBusy`), o sistema exibe um overlay suave (*"✨ Atualizando o Nosso Dia (v2.3.0)..."*), limpa o Cache Storage / Service Worker e recarrega automaticamente em 900ms.
+- **Confirmação Assistida quando em Uso Ativo (`[ Atualizar agora ]` / `[ Depois ]`):**
+  - Se uma nova versão for detectada enquanto o usuário estiver com um modal aberto (criando atividade, gravando áudio na IA, gerenciando família) ou durante o ciclo periódico de 15 minutos, o app preserva o trabalho em andamento e exibe o banner ergonômico na zona do polegar com opções **`[ Atualizar agora ]`** e **`[ Depois ]`**.
+- **Feedback Pós-Atualização:**
+  - Após recarregar na nova versão, exibe automaticamente um Toast verde de confirmação: *"🎉 Nosso Dia atualizado (v2.3.0)! Você já está usando a versão mais recente."*
 
 ### [v2.2.0] — 2026-11-04
 #### ⚡ Otimização de Performance na Inicialização (Supabase) & Refinamento UI/UX Mobile-First

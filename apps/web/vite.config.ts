@@ -3,7 +3,12 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import pkg from './package.json';
 
+const BUILD_TIME = Date.now();
+
 export default defineConfig({
+  define: {
+    __APP_BUILD_TIME__: JSON.stringify(BUILD_TIME)
+  },
   plugins: [
     react(),
     {
@@ -17,7 +22,7 @@ export default defineConfig({
           JSON.stringify(
             {
               version: pkg.version,
-              buildTime: Date.now()
+              buildTime: BUILD_TIME
             },
             null,
             2
