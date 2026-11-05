@@ -85,3 +85,4 @@ export const MemberAvatar: React.FC<MemberAvatarProps> = ({
     </div>
   );
 };
+

@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v2.3.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v2.3.1-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -206,7 +206,7 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
-### [v2.3.0] — 2026-11-04
+### [v2.3.1] — 2026-11-05
 #### 👤 Ícones e Avatares de Perfil com Font Awesome Free (`MemberAvatar.tsx`, `AvatarPickerModal.tsx`, `avatars.ts`)
 - **Biblioteca Vetorial Embutida (Zero Dependências Extras):**
   - Integração de 20 ícones populares e amigáveis do Font Awesome Free organizados por categorias: *Pessoas & Família* (user, smile, baby, glasses, graduation-cap), *Lazer & Natureza* (heart, star, paw, leaf, sun, moon), *Esportes & Aventura* (futbol, basketball, bicycle, person-swimming, skate) e *Símbolos & Criatividade* (crown, rocket, palette, music).
@@ -222,6 +222,9 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e
   - Adição da coluna `avatar TEXT DEFAULT NULL` na tabela `family_members`.
   - Tratamento resiliente no client: caso a coluna ainda não exista no banco remoto, a gravação de membros ocorre normalmente com fallback automático.
 
+---
+
+### [v2.3.0] — 2026-11-04
 #### 🔄 Sistema de Atualização Híbrida Inteligente do PWA (`usePwaUpdate.ts`, `vite.config.ts` e `App.tsx`)
 - **Detecção Dupla por Versão + Timestamp de Build (`__APP_BUILD_TIME__`):**
   - O `vite.config.ts` injeta a constante global `__APP_BUILD_TIME__` no bundle e grava o mesmo timestamp em `/public/version.json`.

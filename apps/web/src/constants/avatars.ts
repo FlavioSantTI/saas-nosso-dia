@@ -162,3 +162,4 @@ export const AVATAR_ICONS: AvatarIconDef[] = [
 export const AVATAR_MAP = new Map<string, AvatarIconDef>(
   AVATAR_ICONS.map((icon) => [icon.id, icon])
 );
+

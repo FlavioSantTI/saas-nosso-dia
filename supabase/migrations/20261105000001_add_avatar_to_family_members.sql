@@ -5,3 +5,4 @@ ALTER TABLE public.family_members
 ADD COLUMN IF NOT EXISTS avatar TEXT DEFAULT NULL;
 
 COMMENT ON COLUMN public.family_members.avatar IS 'Identificador do ícone/avatar escolhido para o membro (Font Awesome)';
+
