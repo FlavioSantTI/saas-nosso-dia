@@ -286,7 +286,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
         {/* Título Contextual Clicável para Recolher/Expandir */}
         <div
           onClick={toggleCollapse}
-          className="flex items-center gap-2.5 cursor-pointer group select-none"
+          className="flex items-center gap-2.5 cursor-pointer group select-none min-w-0 flex-1"
           title={isCollapsed ? 'Clique para expandir' : 'Clique para recolher'}
         >
           <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 transition-colors group-hover:bg-slate-100 shrink-0">
@@ -298,24 +298,24 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
               <Calendar className="w-5 h-5 text-sky-600" />
             )}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-900 group-hover:text-sky-700 transition-colors">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-bold text-slate-900 group-hover:text-sky-700 transition-colors truncate">
                 {dateLabel.title}
               </h2>
               {/* Badge indicativo com contagem quando colapsado */}
               {isCollapsed && (
-                <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full shrink-0">
                   {activeItems.length} atividade(s)
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{dateLabel.subtitle}</p>
+            <p className="text-xs text-slate-500 mt-0.5 truncate">{dateLabel.subtitle}</p>
           </div>
         </div>
 
         {/* Controles de Navegação (Hoje, Amanhã, Setas, Picker e Toggle Retrátil) */}
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
           <button
             type="button"
             onClick={() => setSelectedDate(todayStr)}

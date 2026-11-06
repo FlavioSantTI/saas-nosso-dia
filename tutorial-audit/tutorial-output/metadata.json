@@ -1,0 +1,65 @@
+[
+  {
+    "step": 1,
+    "id": "landing_page",
+    "title": "Página Inicial & Apresentação da Plataforma",
+    "description": "Visão geral pública do Nosso Dia no formato PWA Mobile (390x844), destacando a proposta de valor e botões de adesão.",
+    "focusedSelector": "body",
+    "imagePath": "screenshots/01_landing_page.png",
+    "timestamp": "2026-11-06T11:16:59.411Z"
+  },
+  {
+    "step": 2,
+    "id": "login_modal",
+    "title": "Tela de Acesso da Família (Login)",
+    "description": "Formulário simplificado de autenticação com campos de e-mail e senha para os membros adultos da família.",
+    "focusedSelector": "#auth-email",
+    "imagePath": "screenshots/02_login_modal.png",
+    "timestamp": "2026-11-06T11:17:01.605Z"
+  },
+  {
+    "step": 3,
+    "id": "dashboard_agenda",
+    "title": "Dashboard & Grade de Coordenação Semanal",
+    "description": "Visão consolidada da semana com cartões de atividades, contadores de compromissos e navegação temporal rápida.",
+    "focusedSelector": "main",
+    "imagePath": "screenshots/03_dashboard_agenda.png",
+    "timestamp": "2026-11-06T11:17:05.794Z"
+  },
+  {
+    "step": 4,
+    "id": "meu_dia_resumo",
+    "title": "Briefing Familiar & Operação Diária (\"Meu Dia\")",
+    "description": "Painel diário focado no que fazer hoje, com contagem regressiva para a próxima saída e divisão clara entre os cônjuges.",
+    "focusedSelector": "body",
+    "imagePath": "screenshots/04_meu_dia_resumo.png",
+    "timestamp": "2026-11-06T11:17:07.812Z"
+  },
+  {
+    "step": 5,
+    "id": "menu_adicionar",
+    "title": "Menu de Ações Rápidas (IA ou Manual)",
+    "description": "Opções dinâmicas para adicionar rotinas: captura inteligente com IA multimodal ou formulário detalhado.",
+    "focusedSelector": "body",
+    "imagePath": "screenshots/05_menu_adicionar.png",
+    "timestamp": "2026-11-06T11:17:10.243Z"
+  },
+  {
+    "step": 6,
+    "id": "modal_cadastro_atividade",
+    "title": "Cadastro de Compromisso Compartilhado",
+    "description": "Definição completa da atividade: título, horário, local, participante e adulto responsável pela logística.",
+    "focusedSelector": "#manual-activity-title",
+    "imagePath": "screenshots/06_modal_cadastro_atividade.png",
+    "timestamp": "2026-11-06T11:17:12.643Z"
+  },
+  {
+    "step": 7,
+    "id": "filtro_responsavel",
+    "title": "Filtro de Atividades por Membro da Família",
+    "description": "Filtragem com 1 clique da grade semanal pelo avatar e cor do responsável, isolando sua carga de compromissos.",
+    "focusedSelector": "body",
+    "imagePath": "screenshots/07_filtro_responsavel.png",
+    "timestamp": "2026-11-06T11:17:15.065Z"
+  }
+]

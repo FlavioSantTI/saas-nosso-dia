@@ -110,21 +110,21 @@ export const Header: React.FC<HeaderProps> = ({
     <>
       <header className="bg-white/85 backdrop-blur-md border-b border-sky-100/80 sticky top-0 z-30 shadow-xs">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between">
-        {/* Lado Esquerdo: Identidade da Família (Compacto no Mobile) */}
-        <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
+        {/* Lado Esquerdo: Identidade da Família (Flexível e Seguro no Mobile) */}
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1 mr-2">
           {!logoError ? (
             <img
               src="/icons/logo-round-1024.png"
               alt="Logo Nosso Dia"
               onError={() => setLogoError(true)}
-              className="w-10 h-10 rounded-full object-cover shadow-xs border border-sky-100 shrink-0"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover shadow-xs border border-sky-100 shrink-0"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-sky-100 text-sky-800 font-extrabold flex items-center justify-center text-sm shadow-xs border border-sky-100 shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-sky-100 text-sky-800 font-extrabold flex items-center justify-center text-xs sm:text-sm shadow-xs border border-sky-100 shrink-0">
               ND
             </div>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1 className="text-sm sm:text-lg font-bold tracking-tight text-slate-800 leading-tight truncate">
                 Nosso Dia
@@ -146,39 +146,42 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              <span className="text-[10px] sm:text-xs text-slate-500 font-medium truncate max-w-[110px] sm:max-w-xs">
+            <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+              <span className="text-[10px] sm:text-xs text-slate-500 font-medium truncate max-w-[90px] sm:max-w-xs shrink-0">
                 {family.name}
               </span>
-              <span className="text-slate-300 text-xs">•</span>
+              <span className="text-slate-300 text-xs shrink-0">•</span>
               <button
                 type="button"
                 onClick={() => setShowPlanModal(true)}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all shadow-2xs cursor-pointer ${
+                className={`inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold transition-all shadow-2xs cursor-pointer shrink-0 ${
                   isTrial
                     ? 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
                     : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
                 }`}
                 title="Ver vigência e detalhes da assinatura"
               >
-                <Crown className="w-2.5 h-2.5 text-indigo-600" />
-                <span>
+                <Crown className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
+                <span className="hidden sm:inline">
                   {planBadgeText}
                   {isTrial ? ` (${daysRemaining} dias)` : ''}
+                </span>
+                <span className="sm:hidden">
+                  {isTrial ? `${daysRemaining}d` : planBadgeText}
                 </span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Lado Direito do Header: Limpo, Arejado e sem sobrecarga */}
-        <div className="flex items-center space-x-2 sm:space-x-3">
+        {/* Lado Direito do Header: Fixo e Contido sem Vazar da Tela */}
+        <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
           {/* Botão de Busca Rápida (Sempre Visível, Limpo e Acessível) */}
           {onOpenSearch && (
             <button
               type="button"
               onClick={onOpenSearch}
-              className="w-11 h-11 flex items-center justify-center rounded-xl bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 hover:text-sky-800 transition-colors shadow-2xs cursor-pointer"
+              className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-white border border-sky-100 hover:bg-sky-50 text-slate-700 hover:text-sky-800 transition-colors shadow-2xs cursor-pointer shrink-0"
               title="Buscar Atividades (Ctrl+K)"
               aria-label="Buscar Atividades"
             >
@@ -216,7 +219,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="min-w-[44px] min-h-[44px] flex items-center justify-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
+                className="w-10 h-10 sm:w-auto sm:min-w-[44px] min-h-[40px] sm:min-h-[44px] flex items-center justify-center gap-1.5 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 transition-all shadow-2xs cursor-pointer shrink-0"
                 title="Opções da Conta e Família"
                 aria-label="Opções da Conta"
               >
@@ -231,9 +234,9 @@ export const Header: React.FC<HeaderProps> = ({
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
               </button>
 
-              {/* Dropdown do Usuário com Versão, Super-Admin e Créditos */}
+              {/* Dropdown do Usuário com Contenção de Viewport */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-24px)] bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
                   <div className="p-2.5 border-b border-slate-100 flex items-center gap-2.5">
                     <MemberAvatar
                       member={currentMember || { name: rawDisplayName, color: memberColor }}
@@ -327,7 +330,7 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <button
               onClick={onOpenAuth}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition-all cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition-all cursor-pointer shadow-xs shrink-0"
               title="Entrar ou Criar Conta"
             >
               <LogIn className="w-3.5 h-3.5" />

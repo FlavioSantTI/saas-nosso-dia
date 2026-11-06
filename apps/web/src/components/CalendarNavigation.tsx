@@ -122,9 +122,9 @@ export const CalendarNavigation: React.FC<CalendarNavigationProps> = ({
           </button>
         </div>
 
-        <h2 className="text-body sm:text-title-sm font-bold text-slate-900 tracking-tight select-none flex items-center gap-2">
-          <CalendarIcon className="w-4 h-4 text-sky-600 hidden sm:inline" />
-          <span>{title}</span>
+        <h2 className="text-body sm:text-title-sm font-bold text-slate-900 tracking-tight select-none flex items-center gap-2 min-w-0 flex-1 truncate">
+          <CalendarIcon className="w-4 h-4 text-sky-600 hidden sm:inline shrink-0" />
+          <span className="truncate">{title}</span>
         </h2>
       </div>
 

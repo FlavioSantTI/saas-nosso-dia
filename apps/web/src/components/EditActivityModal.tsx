@@ -446,19 +446,19 @@ export const EditActivityModal: React.FC<EditActivityModalProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSaving || isDeleting}
-                className="min-h-[44px] px-4 py-2.5 text-body-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                className="flex-1 sm:flex-initial min-h-[44px] px-4 py-2.5 text-body-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer text-center"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={isSaving || isDeleting || !title.trim()}
-                className="min-h-[44px] px-6 py-2.5 text-body-sm font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-xl transition-all shadow-xs hover:shadow disabled:opacity-50 cursor-pointer"
+                className="flex-1 sm:flex-initial min-h-[44px] px-5 sm:px-6 py-2.5 text-body-sm font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-xl transition-all shadow-xs hover:shadow disabled:opacity-50 cursor-pointer text-center whitespace-nowrap"
               >
                 {isSaving ? 'Salvando...' : 'Salvar Alterações'}
               </button>

@@ -32,8 +32,11 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   const initial = memberName.trim().charAt(0).toUpperCase() || '?';
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-[60] animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-sky-100 flex flex-col max-h-[85vh] overflow-hidden">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-3 z-[60] animate-in fade-in duration-150">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-sky-100 flex flex-col max-h-[90vh] sm:max-h-[85vh] overflow-hidden">
+        {/* Puxador Mobile (Drag handle) */}
+        <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden shrink-0" aria-hidden="true" />
+
         {/* Cabeçalho */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
           <div>

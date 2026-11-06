@@ -507,11 +507,11 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
           </div>
         </div>
 
-        <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex justify-end gap-3 shrink-0 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:pb-4">
+        <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5 sm:gap-3 shrink-0 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:pb-4">
           <button 
             type="button"
             onClick={onClose}
-            className="min-h-[44px] px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200/70 rounded-xl transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial min-h-[44px] px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200/70 rounded-xl transition-all cursor-pointer text-center"
           >
             Cancelar
           </button>
@@ -519,7 +519,7 @@ export const AddManualActivityModal: React.FC<AddManualActivityModalProps> = ({
             type="button"
             onClick={handleSave}
             disabled={!title || (!isAllDay && !startTime) || isSaving}
-            className="min-h-[44px] px-5 py-2.5 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xs hover:shadow cursor-pointer"
+            className="flex-1 sm:flex-initial min-h-[44px] px-5 py-2.5 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xs hover:shadow cursor-pointer text-center whitespace-nowrap"
           >
             {isSaving ? 'Salvando...' : 'Salvar Atividade'}
           </button>

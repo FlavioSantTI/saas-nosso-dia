@@ -1,0 +1,19 @@
+{
+  "name": "nosso-dia-tutorial-audit",
+  "version": "1.0.0",
+  "description": "Suíte de automação E2E e geração de tutoriais visuais interativos para o Nosso Dia PWA",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "build:docs": "tsx scripts/build-docs.ts",
+    "audit:all": "playwright test && tsx scripts/build-docs.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
