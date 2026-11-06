@@ -206,7 +206,25 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
-### [v2.3.1] — 2026-11-05
+### [v2.3.1] — 2026-11-06
+#### 📱 Blindagem Mobile-First, Contenção de Viewport & Correção de Vazamentos no Cabeçalho e Modais
+- **Eliminação de Overflow Horizontal no Cabeçalho (`Header.tsx`):**
+  - **Flexibilidade Dinâmica à Esquerda:** Substituição de `shrink-0` por `min-w-0 flex-1`, permitindo que o título e nome da família se ajustem com truncamento suave sem espremer o lado direito.
+  - **Badge de Assinatura Responsivo:** Em telas mobile (`< 640px`), exibe formato compacto com coroa e dias restantes (`👑 14d`), mantendo o detalhamento textual para o desktop e o interior do dropdown.
+  - **Ancoragem Fiel de Controles:** O botão de busca e o avatar do perfil recebem `shrink-0`, garantindo que fiquem **100% contidos dentro da viewport**, sem corte na margem direita em aparelhos de 360px a 390px.
+  - **Contenção do Dropdown de Conta:** Adicionado `max-w-[calc(100vw-24px)]` para assegurar que o menu suspenso nunca gere barra de rolagem horizontal no navegador.
+- **Ergonomia e Quebras Responsivas nos Modais:**
+  - **Gestão Familiar (`FamilyManageModal.tsx`):** Reestruturação da linha de cada membro em duas fileiras limpas no mobile (Linha 1: Avatar + Nome completo + Botões de ação; Linha 2: Cor + Papel familiar), acabando com o aperto de botões em telas compactas.
+  - **Botões Proporcionais de Rodapé (`AddManualActivityModal.tsx` e `EditActivityModal.tsx`):** Botões *Cancelar* e *Salvar* configurados com `flex-1 sm:flex-initial text-center`, distribuindo o rodapé harmoniosamente no smartphone e no desktop.
+  - **Seletor de Avatares Bottom Sheet (`AvatarPickerModal.tsx`):** Adaptado para o padrão nativo de folha inferior móvel (`items-end` com puxador de arraste central).
+- **Contenção de Texto em Cards e Navegação:**
+  - **Cartões de Atividade (`ActivityCard.tsx`):** Quebra forçada de palavras (`break-words`) e truncamento inteligente para títulos longos, locais e nomes de responsáveis.
+  - **Navegação Temporal (`CalendarNavigation.tsx`):** Truncamento seguro do título da semana em telas compactas.
+  - **Resumo Diário (`DailyBriefingCard.tsx`):** Distribuição ordenada dos controles de data e busca sem desalinhar no mobile.
+- **Suíte de Auditoria Automatizada Mobile & Gerador de Tutoriais (`tutorial-audit/`):**
+  - Módulo completo em Playwright + TypeScript emulando iPhone (390×844) e gravando vídeo contínuo da jornada do usuário.
+  - Compilador de documentação interativa exportando `tutorial.html` (Tailwind CDN) e `tutorial.pdf` (Playwright A4).
+
 #### 👤 Ícones e Avatares de Perfil com Font Awesome Free (`MemberAvatar.tsx`, `AvatarPickerModal.tsx`, `avatars.ts`)
 - **Biblioteca Vetorial Embutida (Zero Dependências Extras):**
   - Integração de 20 ícones populares e amigáveis do Font Awesome Free organizados por categorias: *Pessoas & Família* (user, smile, baby, glasses, graduation-cap), *Lazer & Natureza* (heart, star, paw, leaf, sun, moon), *Esportes & Aventura* (futbol, basketball, bicycle, person-swimming, skate) e *Símbolos & Criatividade* (crown, rocket, palette, music).
