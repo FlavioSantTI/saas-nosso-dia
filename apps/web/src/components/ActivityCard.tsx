@@ -29,7 +29,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
       draggable={!isTouchDevice}
       onDragStart={handleDragStart}
       onClick={() => onClick?.(event)}
-      className={`p-3.5 rounded-2xl border text-sm shadow-2xs transition-all duration-200 bg-white flex flex-col justify-between cursor-pointer hover:shadow-xs select-none group relative ${
+      className={`p-3.5 rounded-2xl border text-sm shadow-2xs transition-all duration-200 bg-white flex flex-col justify-between cursor-pointer min-w-0 max-w-full overflow-hidden hover:shadow-xs select-none group relative ${
         hasConflict
           ? 'bg-red-50/50 border-red-300 ring-1 ring-red-300 hover:border-red-400'
           : isWithoutResponsible
@@ -59,11 +59,11 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
 
           {event.location && (
             <span
-              className="text-slate-600 text-caption font-semibold truncate max-w-[130px] flex items-center gap-1"
+              className="text-slate-600 text-caption font-semibold flex items-start gap-1 min-w-0 max-w-full"
               title={event.location.name}
             >
-              <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-              <span className="truncate">{event.location.name}</span>
+              <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-px" />
+              <span className="break-words min-w-0">{event.location.name}</span>
             </span>
           )}
         </div>
@@ -71,12 +71,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
         {/* Título da Atividade */}
         <h3 className="font-bold text-slate-900 text-body mb-2.5 group-hover:text-sky-800 transition-colors flex items-start justify-between gap-1.5">
           <span className="leading-snug flex items-center flex-wrap gap-1.5 min-w-0 flex-1 break-words">
-            <span className="break-words">{event.title}</span>
-            {event.location?.name && (
-              <span className="inline-flex items-center text-caption font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md truncate max-w-[130px]" title={event.location.name}>
-                📍 {event.location.name}
-              </span>
-            )}
+            <span className="break-words min-w-0">{event.title}</span>
           </span>
           <span className="text-caption text-slate-400 group-hover:text-slate-600 transition-colors ml-1 shrink-0 font-mono mt-0.5">
             ⋮⋮
@@ -89,12 +84,12 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
             {event.participants.map((p) => (
               <span
                 key={p.id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-caption font-bold text-white shadow-2xs truncate max-w-[130px]"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-caption font-bold text-white shadow-2xs max-w-full min-w-0"
                 style={{ backgroundColor: p.color }}
                 title={getMemberDisplayName(p)}
               >
                 {p.avatar && <MemberAvatar member={p} size="xs" className="!w-3 !h-3 rounded-xs shrink-0" />}
-                <span className="truncate">{getMemberDisplayName(p)}</span>
+                <span className="break-words min-w-0">{getMemberDisplayName(p)}</span>
               </span>
             ))}
           </div>
@@ -102,20 +97,20 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ event, hasConflict, 
       </div>
 
       {/* Rodapé: Responsável pela Logística (Leva/Busca) */}
-      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-caption gap-2">
-        <span className="text-slate-600 font-semibold text-caption shrink-0">Responsável:</span>
+      <div className="pt-2.5 border-t border-slate-100 flex flex-col items-start text-caption gap-1 min-w-0">
+        <span className="text-slate-600 font-semibold text-caption">Responsável:</span>
         {event.responsible ? (
           <span
-            className="font-bold text-slate-800 flex items-center gap-1.5 text-caption min-w-0 max-w-[140px] sm:max-w-[180px] truncate"
+            className="font-bold text-slate-800 flex items-center gap-1.5 text-caption min-w-0 max-w-full"
             title={getMemberDisplayName(event.responsible)}
           >
-            <MemberAvatar member={event.responsible} size="xs" />
-            <span className="truncate">{getMemberDisplayName(event.responsible)}</span>
+            <span className="shrink-0"><MemberAvatar member={event.responsible} size="xs" /></span>
+            <span className="break-words min-w-0">{getMemberDisplayName(event.responsible)}</span>
           </span>
         ) : (
-          <span className="text-amber-950 font-bold bg-amber-100/90 px-2.5 py-1 rounded-lg text-caption flex items-center gap-1 border border-amber-300 shadow-2xs shrink-0">
+          <span className="text-amber-950 font-bold bg-amber-100/90 px-2.5 py-1 rounded-lg text-caption flex items-center gap-1 border border-amber-300 shadow-2xs min-w-0 max-w-full">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-            <span>Sem responsável</span>
+            <span className="break-words min-w-0">Sem responsável</span>
           </span>
         )}
       </div>
