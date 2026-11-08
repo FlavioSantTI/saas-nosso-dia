@@ -1892,6 +1892,12 @@ export const App: React.FC = () => {
                 onEventsChanged={loadData}
                 onNotify={showToast}
                 onOpenSearch={() => setIsSearchOpen(true)}
+                onDateChange={(dateStr) => {
+                  const [y, m, d] = dateStr.split('-').map(Number);
+                  if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                    setCurrentDate(new Date(y, m - 1, d, 12, 0, 0));
+                  }
+                }}
               />
             </div>
           )}

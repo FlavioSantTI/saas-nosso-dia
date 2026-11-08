@@ -65,26 +65,21 @@ export const DayView: React.FC<DayViewProps> = ({
     <div className="max-w-3xl mx-auto w-full bg-white/90 backdrop-blur-xs rounded-3xl border border-sky-100 shadow-2xs p-4 sm:p-6 min-h-[500px] flex flex-col">
       {/* Header do Dia */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
-        <div>
+        <div className="min-w-0 flex-1 mr-2">
           <span className="text-caption font-bold uppercase tracking-wider text-sky-700">
             Visão Detalhada do Dia
           </span>
           <h3 className="text-title-sm sm:text-title font-bold text-slate-900 leading-tight">
             Atividades Agendadas
           </h3>
+          <p className="text-xs text-slate-500 font-medium mt-0.5 capitalize truncate">
+            {currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
         </div>
-        <div className="flex items-center gap-2.5">
-          <span className="px-3 py-1.5 rounded-full text-caption font-bold bg-sky-50 text-sky-900 border border-sky-200 shadow-2xs">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="px-3 py-1.5 rounded-full text-caption font-bold bg-sky-50 text-sky-900 border border-sky-200 shadow-2xs shrink-0">
             {dayEvents.length} {dayEvents.length === 1 ? 'atividade' : 'atividades'}
           </span>
-          {onAddNewActivity && (
-            <button
-              onClick={onAddNewActivity}
-              className="min-h-[44px] px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-body-sm font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
-            >
-              + Adicionar
-            </button>
-          )}
         </div>
       </div>
 

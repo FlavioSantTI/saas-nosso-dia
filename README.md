@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v2.3.1-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v2.3.3-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -205,6 +205,22 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v2.3.3] — 2026-11-08
+#### 🐛 Correção na Consulta de Atividades do Resumo Diário & Fim do Overflow na Visão Detalhada
+- **Busca Atômica e Confiável no Resumo Diário (`DailyBriefingCard.tsx`):**
+  - Eliminação do falso vazio ("0 atividade(s)") ao navegar para datas fora do range da semana ativa (como o botão "Amanhã" no domingo).
+  - Consulta direta e atômica ao Supabase por data selecionada (`selectedDate`), garantindo recuperação imediata de todos os compromissos, participantes, locais e responsáveis.
+  - Sincronização automática de data entre o resumo "Meu Dia" e a visão "Agenda" via callback `onDateChange`.
+- **Eliminação de Vazamento e Duplicidade na Visão do Dia (`DayView.tsx`):**
+  - Remoção do botão redundante `+ Adicionar` no cabeçalho do `DayView`, acabando com o vazamento horizontal em telas de smartphones (≤ 390px).
+  - Adição de indicador da data formatada por extenso no cabeçalho com truncamento suave (*ex.: Segunda-feira, 9 de novembro*).
+- **Aprimoramento do Manifesto PWA (`manifest.json` e `index.html`):**
+  - Declaração explícita do ícone `maskable-192x192.png` e múltiplos tamanhos de `apple-touch-icon` para evitar que navegadores mobile adotem a letra inicial padrão "N".
+
+### [v2.3.2] — 2026-11-07
+#### 🔄 Ajustes de Sincronização e Manutenção de Rotinas
+- Melhorias na materialização e consistência de rotinas familiares periódicas.
 
 ### [v2.3.1] — 2026-11-06
 #### 📱 Blindagem Mobile-First, Contenção de Viewport & Correção de Vazamentos no Cabeçalho e Modais

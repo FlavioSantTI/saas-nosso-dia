@@ -44,6 +44,7 @@ interface DailyBriefingCardProps {
   onEventsChanged?: () => void;
   onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
   onOpenSearch?: () => void;
+  onDateChange?: (dateStr: string) => void;
 }
 
 export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
@@ -53,10 +54,16 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
   events,
   onEventsChanged,
   onNotify,
-  onOpenSearch
+  onOpenSearch,
+  onDateChange
 }) => {
   const todayStr = getLocalDateString();
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+
+  const handleSelectDate = (dateStr: string) => {
+    setSelectedDate(dateStr);
+    onDateChange?.(dateStr);
+  };
   const [items, setItems] = useState<DailyBriefingItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -90,47 +97,38 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
 
       let cleanEvents: any[] = [];
 
-      // Otimização de Performance: Se os eventos já estiverem disponíveis em memória (via props),
-      // deriva os itens do dia sem fazer nenhuma requisição de rede ao Supabase.
-      if (events && Array.isArray(events) && events.length > 0) {
-        const dayEvents = events.filter(
-          (e: Record<string, any>) => extractLiteralDate(e.start_time) === selectedDate
-        );
-        cleanEvents = deduplicateAndCleanEvents(dayEvents);
-      } else {
-        // Fallback: se os eventos ainda não foram carregados, busca no Supabase filtrando estritamente pela data selecionada
-        const { data: rawEvents, error: queryError } = await supabase
-          .from('events')
-          .select(`
-            id,
-            family_id,
-            routine_id,
-            title,
-            start_time,
-            end_time,
-            is_all_day,
-            status,
-            location_id,
-            responsible_id,
-            locations ( id, name, address ),
-            responsible:family_members!events_responsible_id_fkey ( id, name, nickname, color, role ),
-            event_participants (
-              member_id,
-              family_members ( id, name, nickname, color, role )
-            )
-          `)
-          .eq('family_id', familyId)
-          .gte('start_time', `${selectedDate}T00:00:00`)
-          .lte('start_time', `${selectedDate}T23:59:59`);
+      // Sempre busca no Supabase filtrando estritamente pela data selecionada para garantir dados completos e frescos
+      const { data: rawEvents, error: queryError } = await supabase
+        .from('events')
+        .select(`
+          id,
+          family_id,
+          routine_id,
+          title,
+          start_time,
+          end_time,
+          is_all_day,
+          status,
+          location_id,
+          responsible_id,
+          locations ( id, name, address ),
+          responsible:family_members!events_responsible_id_fkey ( id, name, nickname, color, role ),
+          event_participants (
+            member_id,
+            family_members ( id, name, nickname, color, role )
+          )
+        `)
+        .eq('family_id', familyId)
+        .gte('start_time', `${selectedDate}T00:00:00`)
+        .lte('start_time', `${selectedDate}T23:59:59`);
 
-        if (queryError) throw queryError;
+      if (queryError) throw queryError;
 
-        const dayEvents = (rawEvents || []).filter(
-          (e: Record<string, any>) => extractLiteralDate(e.start_time) === selectedDate
-        );
+      const dayEvents = (rawEvents || []).filter(
+        (e: Record<string, any>) => extractLiteralDate(e.start_time) === selectedDate
+      );
 
-        cleanEvents = deduplicateAndCleanEvents(dayEvents);
-      }
+      cleanEvents = deduplicateAndCleanEvents(dayEvents);
 
       const mapped: DailyBriefingItem[] = cleanEvents.map((e: Record<string, any>) => {
         const loc = Array.isArray(e.locations) ? e.locations[0] : (e.location || e.locations);
@@ -318,7 +316,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
         <div className="flex items-center gap-1.5 flex-wrap shrink-0">
           <button
             type="button"
-            onClick={() => setSelectedDate(todayStr)}
+            onClick={() => handleSelectDate(todayStr)}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               selectedDate === todayStr
                 ? 'bg-slate-900 text-white shadow-2xs'
@@ -330,7 +328,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
 
           <button
             type="button"
-            onClick={() => setSelectedDate(shiftDateString(todayStr, 1))}
+            onClick={() => handleSelectDate(shiftDateString(todayStr, 1))}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               selectedDate === shiftDateString(todayStr, 1)
                 ? 'bg-slate-900 text-white shadow-2xs'
@@ -343,7 +341,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
           <div className="flex items-center bg-slate-100 rounded-xl p-0.5 border border-slate-200">
             <button
               type="button"
-              onClick={() => setSelectedDate((prev) => shiftDateString(prev, -1))}
+              onClick={() => handleSelectDate(shiftDateString(selectedDate, -1))}
               className="w-9 h-9 flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
               title="Dia anterior"
               aria-label="Dia anterior"
@@ -352,7 +350,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setSelectedDate((prev) => shiftDateString(prev, 1))}
+              onClick={() => handleSelectDate(shiftDateString(selectedDate, 1))}
               className="w-9 h-9 flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
               title="Próximo dia"
               aria-label="Próximo dia"
@@ -367,7 +365,7 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
               value={selectedDate}
               onChange={(e) => {
                 if (e.target.value) {
-                  setSelectedDate(e.target.value);
+                  handleSelectDate(e.target.value);
                 }
               }}
               className="sr-only"
