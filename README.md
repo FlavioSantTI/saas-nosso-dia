@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v2.3.3-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v2.3.4-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -205,6 +205,22 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v2.3.4] — 2026-11-08
+#### 🔔 Arquitetura Completa de Web Push Notifications, Service Worker e Alarme Sonoro
+- **Service Worker Nativo de Segundo Plano (`sw.js`):**
+  - Gerenciador do evento `push` com payload dinâmico, vibração em pulso duplo (`[400, 150, 400, 150, 600]`), `requireInteraction: true` e `renotify: true`.
+  - Tratamento do evento `notificationclick` com foco automático na janela aberta da aplicação ou abertura de nova janela via `clients.openWindow()`.
+- **Motor de Áudio & Alarme Sonoro em Tela Cheia (`alarmAudio.ts`, `ActiveAlarmOverlay.tsx`):**
+  - Som de alarme melódico em loop contínuo (`/sounds/alarm.mp3`) com sintetizador nativo via **Web Audio API** como fallback infalível.
+  - Tela cheia com visual imersivo, animações de ondas pulsantes e controles imediatos de **"Desligar Alarme"**, **"Soneca (5 min)"** e silenciar som.
+- **Inscrição Criptográfica VAPID & Persistência no Supabase (`pushSubscription.ts`):**
+  - Helper utilitário com conversão Base64 para Uint8Array e registro seguro no Push Manager.
+  - Tabela `push_subscriptions` no Supabase com RLS para armazenamento de tokens criptográficos (`endpoint`, `p256dh`, `auth`).
+- **Modal Contextual de Permissão Soft Ask (`AlarmPermissionModal.tsx`):**
+  - Diálogo amigável integrado ao design system do Nosso Dia, ativando alertas com 1 clique e respeitando a decisão do usuário via `localStorage`.
+- **Script de Teste de Disparo Backend / Automação (`scripts/send-web-push.js`):**
+  - Script Node.js pronto para testes ou integração com n8n e Supabase Edge Functions.
 
 ### [v2.3.3] — 2026-11-08
 #### 🐛 Correção na Consulta de Atividades do Resumo Diário & Fim do Overflow na Visão Detalhada

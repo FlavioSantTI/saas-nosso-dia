@@ -19,6 +19,8 @@ import { BottomNavBar, BottomNavTab } from './components/BottomNavBar';
 import { BalanceView } from './components/BalanceView';
 import { Onboarding } from './components/Onboarding';
 import { MemberAvatar } from './components/MemberAvatar';
+import { ActiveAlarmOverlay } from './components/ActiveAlarmOverlay';
+import { AlarmPermissionModal, ALARM_PROMPT_DISMISSED_KEY } from './components/AlarmPermissionModal';
 import { supabase } from './lib/supabase';
 import { startNotificationScheduler, requestNotificationPermission } from './lib/notifications';
 import { getMemberDisplayName } from './lib/formatters';
@@ -425,6 +427,29 @@ export const App: React.FC = () => {
       window.location.search.includes('admin=true')
     );
   });
+
+  // Estado do Alarme Ativo (Overlay de tela cheia disparado via ?alarm=true)
+  const [activeAlarmData, setActiveAlarmData] = useState<{
+    title?: string | null;
+    time?: string | null;
+    location?: string | null;
+    activityId?: string | null;
+  } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('alarm') === 'true') {
+      return {
+        title: params.get('title') || 'Compromisso Familiar',
+        time: params.get('time') || null,
+        location: params.get('location') || null,
+        activityId: params.get('activityId') || null,
+      };
+    }
+    return null;
+  });
+
+  // Estado do Modal Contextual de Permissão de Alarme (Soft Ask)
+  const [isAlarmPermissionOpen, setIsAlarmPermissionOpen] = useState(false);
 
   // Verifica se algum modal/formulário está aberto para não interromper o usuário com auto-reload
   const isUserBusy =
@@ -963,11 +988,60 @@ export const App: React.FC = () => {
       (message) => {
         setActiveToastNotification(message);
         setTimeout(() => setActiveToastNotification(null), 9000);
-      }
+      },
+      currentUser?.id,
+      family?.id
     );
 
     return cleanup;
-  }, [events]);
+  }, [events, currentUser?.id, family?.id]);
+
+  // Listener para detecção de URL com query param ?alarm=true
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('alarm') === 'true') {
+        setActiveAlarmData({
+          title: params.get('title') || 'Compromisso Familiar',
+          time: params.get('time') || null,
+          location: params.get('location') || null,
+          activityId: params.get('activityId') || null,
+        });
+      }
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
+  }, []);
+
+  // Exibição amigável do Modal de Permissão de Alarmes Sonoros (Soft Ask)
+  useEffect(() => {
+    if (!currentUser || !family) return;
+    try {
+      const dismissed = localStorage.getItem(ALARM_PROMPT_DISMISSED_KEY);
+      if (!dismissed && typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'default') {
+          const timer = setTimeout(() => {
+            setIsAlarmPermissionOpen(true);
+          }, 3500);
+          return () => clearTimeout(timer);
+        }
+      }
+    } catch {}
+  }, [currentUser, family]);
+
+  const handleDismissAlarm = () => {
+    setActiveAlarmData(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('alarm');
+      url.searchParams.delete('title');
+      url.searchParams.delete('time');
+      url.searchParams.delete('location');
+      url.searchParams.delete('activityId');
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+    } catch {}
+  };
 
   // Fluxo de Onboarding: Criar Família e Membros Iniciais no Supabase
   const handleCreateFamily = async (data: {
@@ -2095,6 +2169,27 @@ export const App: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Overlay de Alarme Ativo em Primeiro Plano */}
+      {activeAlarmData && (
+        <ActiveAlarmOverlay
+          activityTitle={activeAlarmData.title}
+          activityTime={activeAlarmData.time}
+          activityLocation={activeAlarmData.location}
+          onDismiss={handleDismissAlarm}
+        />
+      )}
+
+      {/* Modal Contextual de Permissão de Alarmes Sonoros (Soft Ask) */}
+      {currentUser && (
+        <AlarmPermissionModal
+          isOpen={isAlarmPermissionOpen}
+          userId={currentUser.id}
+          familyId={family?.id}
+          onClose={() => setIsAlarmPermissionOpen(false)}
+          onSuccess={() => showToast('Alarmes sonoros ativados com sucesso!', 'success')}
+        />
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import { EventItem } from '../types';
+import { registerPushService } from './pushSubscription';
 
 // Conjunto para evitar disparos duplicados do mesmo lembrete (flag notified: true)
 const notifiedReminders = new Set<string>();
@@ -28,13 +29,25 @@ export function parseEventStartTime(startTimeStr: string): Date {
 }
 
 /**
- * Solicita permissão para notificações do navegador se ainda não concedida
+ * Solicita permissão para notificações do navegador e registra o Service Worker / Push Subscription
  */
-export async function requestNotificationPermission(): Promise<NotificationPermission> {
+export async function requestNotificationPermission(
+  userId?: string,
+  familyId?: string
+): Promise<NotificationPermission> {
   if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (userId) {
+      const res = await registerPushService(userId, familyId);
+      return res.permission || Notification.permission;
+    }
+
     if (Notification.permission !== 'granted') {
       try {
-        return await Notification.requestPermission();
+        const perm = await Notification.requestPermission();
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+        }
+        return perm;
       } catch (err) {
         console.warn('Erro ao solicitar permissão de notificação:', err);
       }
@@ -44,27 +57,74 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return 'denied';
 }
 
+export interface SendNotificationOptions {
+  body: string;
+  url?: string;
+  activityId?: string;
+  tag?: string;
+}
+
 /**
- * Dispara uma notificação nativa do navegador e/ou exibe toast visual in-app
+ * Dispara uma notificação via Service Worker (ou fallback nativo) e/ou exibe toast visual in-app
  */
-export function sendNotification(title: string, body: string, onInApp?: (msg: string) => void) {
+export async function sendNotification(
+  title: string,
+  optionsOrBody: string | SendNotificationOptions,
+  onInApp?: (msg: string) => void
+) {
+  const options: SendNotificationOptions =
+    typeof optionsOrBody === 'string' ? { body: optionsOrBody } : optionsOrBody;
+
   // Callback in-app para toast visual sempre presente
   if (onInApp) {
-    onInApp(body);
+    onInApp(options.body);
   }
 
-  // Notificação nativa do navegador se permissão estiver concedida
-  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-    try {
-      new Notification(title, {
-        body,
-        icon: '/favicon.ico',
-        badge: '/favicon.ico',
-        tag: `nosso-dia-${Date.now()}`,
-      });
-    } catch (e) {
-      console.warn('Erro ao disparar notificação nativa do navegador:', e);
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  const notificationTag = options.tag || `nosso-dia-${Date.now()}`;
+  const targetUrl = options.url || `/?alarm=true${options.activityId ? `&activityId=${options.activityId}` : ''}`;
+
+  // Prioriza o Service Worker para garantir vibração e interação profunda
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration && 'showNotification' in registration) {
+        await registration.showNotification(title, {
+          body: options.body,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          vibrate: [400, 150, 400, 150, 600],
+          tag: notificationTag,
+          renotify: true,
+          requireInteraction: true,
+          data: {
+            url: targetUrl,
+            activityId: options.activityId
+          }
+        } as any);
+        return;
+      }
     }
+  } catch (swErr) {
+    console.warn('[Notifications] Erro ao disparar via Service Worker, tentando fallback:', swErr);
+  }
+
+  // Fallback nativo
+  try {
+    const notif = new Notification(title, {
+      body: options.body,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: notificationTag,
+    });
+    notif.onclick = () => {
+      window.focus();
+      window.location.href = targetUrl;
+    };
+  } catch (e) {
+    console.warn('[Notifications] Erro ao disparar notificação nativa:', e);
   }
 }
 
@@ -91,15 +151,11 @@ export function checkEventReminders(
 
     const reminderMs = event.reminder_minutes * 60 * 1000;
     const alertTime = eventTime - reminderMs;
-    const nextAlertTime = new Date(alertTime);
-
-    // 4. Log de depuração no console F12 para contagem regressiva
-    console.log("Verificando alertas:", nextAlertTime, "Agora:", now);
 
     // Chave única para controle da flag notified: true
     const reminderKey = `${event.id}_${event.start_time}_${event.reminder_minutes}`;
 
-    // 2. Tolerância: se o horário atual estiver entre (horário_alerta) e (início_do_evento + 2 min)
+    // Tolerância: se o horário atual estiver entre (horário_alerta) e (início_do_evento + 2 min)
     const isWithinAlertWindow = nowMs >= alertTime && nowMs <= eventTime + 2 * 60 * 1000;
 
     if (isWithinAlertWindow && !notifiedReminders.has(reminderKey)) {
@@ -111,7 +167,15 @@ export function checkEventReminders(
           ? `🔔 Lembrete: "${event.title}" está começando agora! Responsável: ${responsibleName}.`
           : `🔔 Lembrete: "${event.title}" começará em ${event.reminder_minutes} minutos! Responsável: ${responsibleName}.`;
 
-      sendNotification('Nosso Dia — Lembrete de Atividade', reminderText, onInAppNotification);
+      sendNotification(
+        'Nosso Dia — Lembrete de Atividade',
+        {
+          body: reminderText,
+          activityId: event.id,
+          url: `/?alarm=true&activityId=${event.id}&title=${encodeURIComponent(event.title)}`
+        },
+        onInAppNotification
+      );
     }
   });
 }
@@ -121,10 +185,12 @@ export function checkEventReminders(
  */
 export function startNotificationScheduler(
   getEvents: () => EventItem[],
-  onInAppNotification?: (msg: string) => void
+  onInAppNotification?: (msg: string) => void,
+  userId?: string,
+  familyId?: string
 ): () => void {
-  // Solicita permissão inicial se necessário
-  requestNotificationPermission();
+  // Solicita permissão inicial se necessário e registra Service Worker
+  requestNotificationPermission(userId, familyId);
 
   const intervalId = setInterval(() => {
     const currentEvents = getEvents();
