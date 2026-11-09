@@ -1,26 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
   Sun,
   Plus,
-  BarChart3,
+  ClipboardList,
   Users,
   Sparkles,
-  Edit3,
+  CalendarPlus,
   Search,
-  X
+  X,
+  FileUp,
+  Pin,
+  BarChart3
 } from 'lucide-react';
 
-export type BottomNavTab = 'agenda' | 'my-day' | 'balance' | 'family';
+export type BottomNavTab = 'agenda' | 'my-day' | 'board' | 'balance' | 'family';
 
 interface BottomNavBarProps {
   activeTab: BottomNavTab;
   onChangeTab: (tab: BottomNavTab) => void;
   onOpenQuickAddWithAI: () => void;
   onOpenNewActivityManual: () => void;
+  onOpenNewBoardItem?: () => void;
+  onOpenBoardImportAI?: () => void;
   onOpenSearch?: () => void;
   todayEventsCount?: number;
   unassignedCount?: number;
+  urgentBoardCount?: number;
 }
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({
@@ -28,222 +34,300 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onChangeTab,
   onOpenQuickAddWithAI,
   onOpenNewActivityManual,
+  onOpenNewBoardItem,
+  onOpenBoardImportAI,
   onOpenSearch,
   todayEventsCount = 0,
   unassignedCount = 0,
+  urgentBoardCount = 0,
 }) => {
-  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const handleCreateClick = () => {
-    setIsCreateMenuOpen((prev) => !prev);
-  };
-
-  const closeMenu = () => setIsCreateMenuOpen(false);
+  // Fecha o menu (+) ao clicar fora ou pressionar ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsAddMenuOpen(false);
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsAddMenuOpen(false);
+      }
+    };
+    if (isAddMenuOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isAddMenuOpen]);
 
   return (
     <>
-      {/* Backdrop para o menu rápido flutuante */}
-      {isCreateMenuOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 transition-opacity animate-fade-in"
-          onClick={closeMenu}
-          aria-hidden="true"
-        />
-      )}
+      {/* Backdrop e Menu Popup do botão central (+) */}
+      {isAddMenuOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 flex items-end justify-center pb-24 px-4 animate-fade-in">
+          <div
+            ref={menuRef}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 p-3 w-full max-w-sm space-y-2 animate-slide-up"
+          >
+            <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                Ações Rápidas da Família
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsAddMenuOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-      {/* Action Sheet Flutuante (Menu Central de Criação) */}
-      {isCreateMenuOpen && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-[92%] max-w-sm bg-white rounded-3xl p-4 shadow-2xl border border-sky-100 z-50 animate-slide-up">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-2">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <span>✨</span> O que deseja adicionar?
-            </span>
-            <button
-              type="button"
-              onClick={closeMenu}
-              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
-              aria-label="Fechar"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {/* Opção 1: Captura com IA */}
+            {/* Opção 1: Capturar com IA na Agenda */}
             <button
               type="button"
               onClick={() => {
-                closeMenu();
+                setIsAddMenuOpen(false);
                 onOpenQuickAddWithAI();
               }}
-              className="w-full flex items-center gap-3.5 p-3 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50/70 border border-amber-200/80 hover:border-amber-300 text-left transition-all cursor-pointer group shadow-2xs"
+              className="w-full flex items-center gap-3.5 p-3 rounded-2xl bg-gradient-to-r from-sky-50 to-indigo-50/70 hover:from-sky-100 hover:to-indigo-100/80 border border-sky-200/80 text-left transition-all cursor-pointer group"
             >
-              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+              <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
                 <Sparkles className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="font-bold text-sm text-amber-950">Captura com IA</p>
-                  <span className="text-[10px] font-extrabold text-amber-800 bg-amber-200/80 px-1.5 py-0.2 rounded-full uppercase">
-                    Rápido
-                  </span>
-                </div>
-                <p className="text-xs text-amber-800/80 truncate">
-                  Digite corrido, envie áudio ou foto de aviso escolar
+                <p className="text-xs font-extrabold text-slate-900">
+                  Capturar Compromisso com IA
+                </p>
+                <p className="text-[11px] text-slate-600 truncate">
+                  Texto, voz ou convite para a Agenda com horário
                 </p>
               </div>
             </button>
 
-            {/* Opção 2: Nova Atividade Manual */}
-            <button
-              type="button"
-              onClick={() => {
-                closeMenu();
-                onOpenNewActivityManual();
-              }}
-              className="w-full flex items-center gap-3.5 p-3 rounded-2xl bg-sky-50/70 hover:bg-sky-50 border border-sky-100 hover:border-sky-300 text-left transition-all cursor-pointer group shadow-2xs"
-            >
-              <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
-                <Edit3 className="w-5 h-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-bold text-sm text-slate-900">Atividade Manual</p>
-                <p className="text-xs text-slate-500 truncate">
-                  Defina horário, responsável, participantes e repetição
-                </p>
-              </div>
-            </button>
-
-            {/* Opção 3: Busca no Calendário */}
-            {onOpenSearch && (
+            {/* Opção 2: Importar Comunicado / Provas para o Mural (IA) */}
+            {onOpenBoardImportAI && (
               <button
                 type="button"
                 onClick={() => {
-                  closeMenu();
-                  onOpenSearch();
+                  setIsAddMenuOpen(false);
+                  onOpenBoardImportAI();
                 }}
-                className="w-full flex items-center gap-3.5 p-2.5 rounded-2xl hover:bg-slate-50 text-left transition-all cursor-pointer group border border-transparent hover:border-slate-200"
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100/80 border border-indigo-200/80 text-left transition-all cursor-pointer group"
               >
-                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-                  <Search className="w-4 h-4" />
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                  <FileUp className="w-5 h-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-xs text-slate-800">Buscar no Calendário</p>
-                  <p className="text-[11px] text-slate-400 truncate">Encontre aniversários, médicos ou aulas</p>
+                  <p className="text-xs font-extrabold text-indigo-950">
+                    Importar Roteiro de Provas / PDF (IA)
+                  </p>
+                  <p className="text-[11px] text-indigo-700 truncate">
+                    Extrai provas, capítulos e trabalhos para o Mural
+                  </p>
                 </div>
               </button>
             )}
+
+            {/* Opção 3: Novo Aviso no Mural */}
+            {onOpenNewBoardItem && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddMenuOpen(false);
+                  onOpenNewBoardItem();
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-left transition-all cursor-pointer group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Pin className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-extrabold text-slate-900">
+                    Novo Aviso no Mural
+                  </p>
+                  <p className="text-[11px] text-slate-600 truncate">
+                    Prova, trabalho escolar, compra de material ou recado
+                  </p>
+                </div>
+              </button>
+            )}
+
+            {/* Opção 4: Nova Atividade Manual na Agenda */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddMenuOpen(false);
+                onOpenNewActivityManual();
+              }}
+              className="w-full flex items-center gap-3.5 p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-left transition-all cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <CalendarPlus className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-extrabold text-slate-900">
+                  Nova Atividade na Agenda
+                </p>
+                <p className="text-[11px] text-slate-600 truncate">
+                  Compromisso com horário, dias de repetição e responsável
+                </p>
+              </div>
+            </button>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {/* Atalho: Balanço da Semana */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddMenuOpen(false);
+                  onChangeTab('balance');
+                }}
+                className="flex items-center justify-center gap-2 p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/70 text-xs font-bold text-slate-700 cursor-pointer"
+              >
+                <BarChart3 className="w-4 h-4 text-sky-700" />
+                <span>Balanço</span>
+                {unassignedCount > 0 && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-extrabold bg-amber-500 text-slate-950 rounded-full">
+                    {unassignedCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Atalho: Buscar */}
+              {onOpenSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddMenuOpen(false);
+                    onOpenSearch();
+                  }}
+                  className="flex items-center justify-center gap-2 p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/70 text-xs font-bold text-slate-700 cursor-pointer"
+                >
+                  <Search className="w-4 h-4 text-slate-500" />
+                  <span>Buscar</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Barra de Navegação do Rodapé (Mobile First Thumb Zone) */}
+      {/* Barra Fixa no Rodapé (Bottom Navigation Bar) */}
       <nav
-        aria-label="Navegação Principal do Rodapé"
-        className="shrink-0 bg-white/95 backdrop-blur-md border-t border-sky-100/90 shadow-[0_-4px_20px_rgba(0,0,0,0.04)] z-30 pb-[env(safe-area-inset-bottom,0px)]"
+        aria-label="Navegação Principal"
+        className="shrink-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 z-30 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)] pb-[env(safe-area-inset-bottom)]"
       >
-        <div className="max-w-md md:max-w-xl mx-auto px-2 sm:px-4 h-16 flex items-center justify-around relative">
-          {/* Aba 1: Agenda */}
+        <div className="max-w-3xl mx-auto px-2 sm:px-6 h-16 grid grid-cols-5 items-center">
+          {/* 1. Agenda */}
           <button
             type="button"
             onClick={() => onChangeTab('agenda')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1.5 transition-colors cursor-pointer relative ${
+            className={`flex flex-col items-center justify-center gap-1 h-full transition-colors cursor-pointer ${
               activeTab === 'agenda'
-                ? 'text-sky-700 font-bold'
-                : 'text-slate-500 hover:text-slate-800 font-medium'
+                ? 'text-sky-700 font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-semibold'
             }`}
           >
-            <div className={`p-1 rounded-xl transition-all ${activeTab === 'agenda' ? 'bg-sky-50 shadow-2xs' : ''}`}>
+            <div
+              className={`px-3 py-1 rounded-full transition-all ${
+                activeTab === 'agenda' ? 'bg-sky-100/90 text-sky-700' : ''
+              }`}
+            >
               <Calendar className="w-5 h-5" />
             </div>
-            <span className="text-[11px] tracking-tight leading-none mt-1">Agenda</span>
-            {activeTab === 'agenda' && (
-              <span className="absolute bottom-1 w-5 h-0.5 bg-sky-600 rounded-full" />
-            )}
+            <span className="text-[11px] leading-none">Agenda</span>
           </button>
 
-          {/* Aba 2: Meu Dia (Resumo Familiar) */}
+          {/* 2. Meu Dia */}
           <button
             type="button"
             onClick={() => onChangeTab('my-day')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1.5 transition-colors cursor-pointer relative ${
+            className={`flex flex-col items-center justify-center gap-1 h-full transition-colors cursor-pointer relative ${
               activeTab === 'my-day'
-                ? 'text-amber-700 font-bold'
-                : 'text-slate-500 hover:text-slate-800 font-medium'
+                ? 'text-sky-700 font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-semibold'
             }`}
           >
-            <div className={`p-1 rounded-xl transition-all relative ${activeTab === 'my-day' ? 'bg-amber-50 shadow-2xs' : ''}`}>
+            <div
+              className={`px-3 py-1 rounded-full transition-all relative ${
+                activeTab === 'my-day' ? 'bg-amber-100/90 text-amber-700' : ''
+              }`}
+            >
               <Sun className="w-5 h-5" />
               {todayEventsCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white rounded-full text-[9px] font-extrabold flex items-center justify-center shadow-2xs">
-                  {todayEventsCount > 9 ? '9+' : todayEventsCount}
+                <span className="absolute -top-1 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-sky-600 text-white text-[9px] font-extrabold flex items-center justify-center shadow-2xs">
+                  {todayEventsCount}
                 </span>
               )}
             </div>
-            <span className="text-[11px] tracking-tight leading-none mt-1">Meu Dia</span>
-            {activeTab === 'my-day' && (
-              <span className="absolute bottom-1 w-5 h-0.5 bg-amber-500 rounded-full" />
-            )}
+            <span className="text-[11px] leading-none">Meu Dia</span>
           </button>
 
-          {/* Botão Central ➕: Integrado no corpo do rodapé */}
-          <div className="flex flex-col items-center justify-center flex-1 h-full py-1">
+          {/* 3. Botão Central (+) Destaque */}
+          <div className="flex items-center justify-center">
             <button
               type="button"
-              onClick={handleCreateClick}
-              className={`w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-xs transition-all active:scale-95 cursor-pointer ${
-                isCreateMenuOpen
-                  ? 'bg-slate-900 rotate-45 shadow-slate-400/40'
-                  : 'bg-sky-600 hover:bg-sky-500 shadow-sky-600/30'
+              onClick={() => setIsAddMenuOpen((prev) => !prev)}
+              aria-label="Adicionar atividade ou aviso"
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg transition-all cursor-pointer ${
+                isAddMenuOpen
+                  ? 'bg-slate-900 rotate-45 scale-95'
+                  : 'bg-sky-600 hover:bg-sky-700 hover:scale-105 shadow-sky-600/25'
               }`}
-              title="Adicionar Atividade"
-              aria-label="Adicionar Atividade"
             >
-              <Plus className="w-5 h-5 stroke-[2.5]" />
+              <Plus className="w-6 h-6 stroke-[2.5]" />
             </button>
           </div>
 
-          {/* Aba 3: Balanço */}
+          {/* 4. Mural da Família (Opção A) */}
           <button
             type="button"
-            onClick={() => onChangeTab('balance')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1.5 transition-colors cursor-pointer relative ${
-              activeTab === 'balance'
-                ? 'text-sky-700 font-bold'
-                : 'text-slate-500 hover:text-slate-800 font-medium'
+            onClick={() => onChangeTab('board')}
+            className={`flex flex-col items-center justify-center gap-1 h-full transition-colors cursor-pointer relative ${
+              activeTab === 'board' || activeTab === 'balance'
+                ? 'text-sky-700 font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-semibold'
             }`}
           >
-            <div className={`p-1 rounded-xl transition-all relative ${activeTab === 'balance' ? 'bg-sky-50 shadow-2xs' : ''}`}>
-              <BarChart3 className="w-5 h-5" />
-              {unassignedCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white rounded-full text-[9px] font-extrabold flex items-center justify-center shadow-2xs animate-pulse">
-                  !
+            <div
+              className={`px-3 py-1 rounded-full transition-all relative ${
+                activeTab === 'board' || activeTab === 'balance'
+                  ? 'bg-sky-100/90 text-sky-700'
+                  : ''
+              }`}
+            >
+              <ClipboardList className="w-5 h-5" />
+              {urgentBoardCount > 0 && (
+                <span className="absolute -top-1 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-slate-950 text-[9px] font-extrabold flex items-center justify-center shadow-2xs">
+                  {urgentBoardCount}
                 </span>
               )}
             </div>
-            <span className="text-[11px] tracking-tight leading-none mt-1">Balanço</span>
-            {activeTab === 'balance' && (
-              <span className="absolute bottom-1 w-5 h-0.5 bg-sky-600 rounded-full" />
-            )}
+            <span className="text-[11px] leading-none">Mural</span>
           </button>
 
-          {/* Aba 4: Família & Configurações */}
+          {/* 5. Família / Ajustes */}
           <button
             type="button"
             onClick={() => onChangeTab('family')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1.5 transition-colors cursor-pointer relative ${
+            className={`flex flex-col items-center justify-center gap-1 h-full transition-colors cursor-pointer ${
               activeTab === 'family'
-                ? 'text-sky-700 font-bold'
-                : 'text-slate-500 hover:text-slate-800 font-medium'
+                ? 'text-sky-700 font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-semibold'
             }`}
           >
-            <div className={`p-1 rounded-xl transition-all ${activeTab === 'family' ? 'bg-sky-50 shadow-2xs' : ''}`}>
+            <div
+              className={`px-3 py-1 rounded-full transition-all ${
+                activeTab === 'family' ? 'bg-sky-100/90 text-sky-700' : ''
+              }`}
+            >
               <Users className="w-5 h-5" />
             </div>
-            <span className="text-[11px] tracking-tight leading-none mt-1">Família</span>
-            {activeTab === 'family' && (
-              <span className="absolute bottom-1 w-5 h-0.5 bg-sky-600 rounded-full" />
-            )}
+            <span className="text-[11px] leading-none">Família</span>
           </button>
         </div>
       </nav>

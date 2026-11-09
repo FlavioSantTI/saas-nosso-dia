@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { DailyBriefingItem } from '../types';
+import { DailyBriefingItem, FamilyBoardItem } from '../types';
+import {
+  BOARD_TYPE_CONFIGS,
+  formatBoardDateShort
+} from '../lib/board';
 import {
   extractLiteralDate,
   extractLiteralTime,
@@ -28,7 +32,9 @@ import {
   BellRing,
   CalendarX,
   Undo2,
-  Search
+  Search,
+  BarChart3,
+  ClipboardList
 } from 'lucide-react';
 import { MemberAvatar } from './MemberAvatar';
 
@@ -37,10 +43,13 @@ interface DailyBriefingCardProps {
   responsibleFilterId?: string | null;
   refreshTrigger?: number;
   events?: any[];
+  boardItems?: FamilyBoardItem[];
   members?: any[];
   currentMember?: any;
   onCardClick?: (event: any) => void;
   onOpenSummary?: (tab?: 'today' | 'week') => void;
+  onOpenBoard?: () => void;
+  onOpenBalance?: () => void;
   onEventsChanged?: () => void;
   onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
   onOpenSearch?: () => void;
@@ -52,6 +61,9 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
   responsibleFilterId,
   refreshTrigger,
   events,
+  boardItems = [],
+  onOpenBoard,
+  onOpenBalance,
   onEventsChanged,
   onNotify,
   onOpenSearch,
@@ -452,17 +464,121 @@ export const DailyBriefingCard: React.FC<DailyBriefingCardProps> = ({
           )}
         </div>
 
-        {activeItems.length > 0 && (
-          <button
-            type="button"
-            onClick={handleCopyWhatsAppReport}
-            className="min-h-[36px] px-2 py-1 inline-flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:text-sky-800 transition-colors ml-auto cursor-pointer"
-          >
-            {copiedWhatsApp ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
-            <span>{copiedWhatsApp ? 'Copiado para o WhatsApp!' : 'Copiar para WhatsApp'}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 ml-auto">
+          {onOpenBalance && (
+            <button
+              type="button"
+              onClick={onOpenBalance}
+              className="min-h-[34px] px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              title="Ver Balanço Semanal da Família"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-sky-700" />
+              <span>Balanço da Semana</span>
+            </button>
+          )}
+
+          {activeItems.length > 0 && (
+            <button
+              type="button"
+              onClick={handleCopyWhatsAppReport}
+              className="min-h-[34px] px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:text-sky-800 transition-colors cursor-pointer"
+            >
+              {copiedWhatsApp ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
+              <span>{copiedWhatsApp ? 'Copiado!' : 'Copiar p/ WhatsApp'}</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Seção "🎯 No Radar": Avisos urgentes/próximos do Mural da Família */}
+      {(() => {
+        const refParts = selectedDate.split('-').map(Number);
+        const refNoon =
+          refParts.length === 3
+            ? new Date(refParts[0], refParts[1] - 1, refParts[2], 12, 0, 0)
+            : new Date();
+
+        const radarItems = (boardItems || []).filter((b) => {
+          if (b.status !== 'OPEN') return false;
+          if (b.is_pinned) return true;
+          if (!b.due_date) return false;
+          const [dy, dm, dd] = b.due_date.slice(0, 10).split('-').map(Number);
+          if (!dy) return false;
+          const dueNoon = new Date(dy, dm - 1, dd, 12, 0, 0);
+          const diffDays = Math.round(
+            (dueNoon.getTime() - refNoon.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          return diffDays >= -2 && diffDays <= 3;
+        });
+
+        if (radarItems.length === 0) return null;
+
+        return (
+          <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50/70 via-sky-50/50 to-amber-50/40 border border-indigo-200/80 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🎯</span>
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-indigo-950">
+                  No Radar do Mural (Provas & Entregas Próximas)
+                </h3>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900">
+                  {radarItems.length}
+                </span>
+              </div>
+              {onOpenBoard && (
+                <button
+                  type="button"
+                  onClick={onOpenBoard}
+                  className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 cursor-pointer"
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  <span>Abrir Mural</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {radarItems.slice(0, 4).map((b) => {
+                const cfg = BOARD_TYPE_CONFIGS[b.type] || BOARD_TYPE_CONFIGS.NOTE;
+                const totalChk = Array.isArray(b.checklist) ? b.checklist.length : 0;
+                const doneChk = Array.isArray(b.checklist)
+                  ? b.checklist.filter((c) => c.done).length
+                  : 0;
+                return (
+                  <div
+                    key={b.id}
+                    onClick={onOpenBoard}
+                    className="p-2.5 rounded-xl bg-white/95 border border-indigo-100 hover:border-indigo-300 flex items-center justify-between gap-2 cursor-pointer transition-all shadow-2xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base shrink-0">{cfg.emoji}</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">{b.title}</p>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                          {b.due_date && (
+                            <span className="font-semibold text-indigo-700">
+                              📅 {formatBoardDateShort(b.due_date)}
+                            </span>
+                          )}
+                          {totalChk > 0 && (
+                            <span>
+                              • ✅ {doneChk}/{totalChk} tópicos
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {b.related_member && (
+                      <MemberAvatar member={b.related_member} size="xs" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Estados: Loading, Error e Lista de Atividades */}
       {isLoading ? (

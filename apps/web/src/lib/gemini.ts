@@ -298,3 +298,221 @@ Formato OBRIGATÓRIO de saída (JSON puro):
     location: (parsed.location || '').trim().slice(0, 100)
   };
 }
+
+export interface ExtractedBoardItemDraft {
+  id: string;
+  selected: boolean;
+  type: 'EXAM' | 'ASSIGNMENT' | 'SUPPLY' | 'PERMISSION' | 'NOTE';
+  title: string;
+  due_date: string | null; // YYYY-MM-DD
+  subject: string;
+  grade_composition: string;
+  study_tips: string;
+  delivery_format: string;
+  estimated_cost: string;
+  notes: string;
+  checklist: { id: string; text: string; done: boolean }[];
+}
+
+export async function extractBoardItemsWithGemini(
+  promptText: string,
+  attachment?: {
+    kind?: 'image' | 'pdf' | 'docx' | 'doc' | 'text';
+    mimeType?: string;
+    base64?: string;
+    base64Data?: string;
+    text?: string;
+    extractedText?: string;
+    fileName?: string;
+  } | null
+): Promise<ExtractedBoardItemDraft[]> {
+  const apiKey = await getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error('Chave da API do Google Gemini não configurada. Configure no Painel Super-Admin.');
+  }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const todayStr = getLocalDateString(now);
+
+  const systemInstruction = `
+Você é um assistente especialista em organização escolar e familiar do aplicativo "Nosso Dia".
+Sua tarefa é ler um comunicado escolar, calendário de provas, circular, lista de materiais ou foto de aviso e extrair TODOS os avisos/tarefas relevantes para o Mural da Família em formato JSON.
+
+Contexto Temporal:
+- Hoje é ${todayStr} (Ano corrente: ${currentYear}).
+- Quando o documento mencionar datas como "13/11" ou "26/11", converta para o formato ISO "YYYY-MM-DD" usando o ano ${currentYear} (ex: "${currentYear}-11-13"). Se não houver data explícita para um trabalho ou aviso, use null em due_date.
+
+REGRAS OBRIGATÓRIAS DE EXTRAÇÃO (DECISÕES DA FAMÍLIA):
+1. AGLUTINAÇÃO POR DATA CONFORME O COMUNICADO:
+   - Se o calendário tiver duas disciplinas na mesma linha/data (ex: "26/11 - HISTÓRIA e GEOGRAFIA"), mantenha-as AGLUTINADAS em UM ÚNICO card do tipo "EXAM" (ex: title: "Prova de História e Geografia", subject: "História e Geografia"), listando os capítulos de ambas as matérias no checklist (identificando a matéria no texto do tópico, ex: "História - Cap. 13: ...").
+2. EXTRAÇÃO DE TRABALHOS EMBUTIDOS (ASSIGNMENT):
+   - Inspecione atentamente a coluna "Composição da Nota" e os rodapés/observações do documento!
+   - Se houver menção a trabalhos, leituras de livros paradidáticos, projetos ou entregas avaliativas (ex: "Trabalho do livro Paradidático - As aventuras de um cão chamado Petit", "Projeto Bimestral de Inglês", "Trabalhos de Arte, LIV e Ensino Religioso"), EXTRAIA CADA UM DELES como um card separado do tipo "ASSIGNMENT".
+   - Se o trabalho estiver vinculado à nota de uma matéria que tem data no calendário e não tiver outra data própria explícita, você pode usar a mesma due_date da matéria ou null, explicando em grade_composition quanto vale o trabalho.
+3. CHECKLIST ACIONÁVEL:
+   - Transforme cada capítulo, tópico do conteúdo programático, páginas do livro ou plataforma de estudo (ex: "Atividades do Eureka", "Estudar pelo suplemento") em itens individuais dentro do array "checklist".
+4. TIPOS SUPORTADOS (campo "type"):
+   - "EXAM": Provas, avaliações, simulados, testes.
+   - "ASSIGNMENT": Trabalhos escolares, projetos, leitura de paradidático, maquetes, deveres avaliativos.
+   - "SUPPLY": Compra ou envio de materiais, livros, uniforme, itens de feira/festa.
+   - "PERMISSION": Autorizações de passeio, assinatura de documentos, matrículas, pagamentos.
+   - "NOTE": Comunicados ou avisos gerais importantes.
+
+Retorne EXCLUSIVAMENTE um objeto JSON válido com a propriedade "items" seguindo exatamente esta estrutura:
+{
+  "items": [
+    {
+      "type": "EXAM" | "ASSIGNMENT" | "SUPPLY" | "PERMISSION" | "NOTE",
+      "title": "Título claro e direto (ex: Prova de Matemática / Trabalho Paradidático: Petit)",
+      "due_date": "YYYY-MM-DD" ou null,
+      "subject": "Disciplina(s) (ex: Matemática, Português, História e Geografia)",
+      "grade_composition": "Resumo da pontuação (ex: Avaliação: 4,0 pts | Simulado: 2,0 pts | Sala: 2,0 pts | Eureka: 1,0 pt | Qualitativa: 1,0 pt)",
+      "study_tips": "Sugestões de estudo ou orientações gerais (ex: Estudar pelo livro, suplemento, caderno e SAS/Eureka)",
+      "delivery_format": "Formato de entrega se for ASSIGNMENT (ex: Trabalho escrito / Apresentação / Leitura)",
+      "estimated_cost": "Valor estimado se for SUPPLY ou PERMISSION (ex: R$ 45,00)",
+      "notes": "Observações adicionais relevantes",
+      "checklist": [
+        "Cap. 12: Porcentagem, números decimais e fracionários",
+        "Cap. 13: Informações e dados em tabelas e gráficos",
+        "Realizar atividades do Eureka"
+      ]
+    }
+  ]
+}
+`;
+
+  const parts: any[] = [{ text: systemInstruction }];
+
+  if (attachment) {
+    const b64 = attachment.base64 || attachment.base64Data;
+    const docText = attachment.text || attachment.extractedText;
+    if ((attachment.kind === 'image' || attachment.kind === 'pdf') && b64 && attachment.mimeType) {
+      parts.push({
+        inline_data: {
+          mime_type: attachment.mimeType,
+          data: b64
+        }
+      });
+    } else if (docText) {
+      parts.push({
+        text: `\n--- CONTEÚDO EXTRAÍDO DO DOCUMENTO (${attachment.fileName || 'anexo'}) ---\n${docText}\n--- FIM DO DOCUMENTO ---\n`
+      });
+    }
+  }
+
+  if (promptText && promptText.trim()) {
+    parts.push({ text: `Instruções / Texto adicional do usuário: "${promptText.trim()}"` });
+  } else {
+    parts.push({ text: 'Extraia todos os itens (provas, trabalhos embutidos na nota, entregas e avisos) deste documento.' });
+  }
+
+  const payload = {
+    contents: [{ parts }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.1
+    }
+  };
+
+  const candidateModels = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-flash'
+  ];
+
+  let result: any = null;
+  let lastErrorMessage = '';
+
+  for (const model of candidateModels) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        result = await response.json();
+        break;
+      }
+
+      const errorData = await response.json().catch(() => ({}));
+      lastErrorMessage = errorData?.error?.message || `Erro na API do Gemini (${response.status})`;
+
+      if (response.status !== 404) {
+        throw new Error(lastErrorMessage);
+      }
+    } catch (err: any) {
+      if (err.message && !err.message.includes('not found') && !err.message.includes('404')) {
+        throw err;
+      }
+      lastErrorMessage = err.message;
+    }
+  }
+
+  if (!result) {
+    throw new Error(lastErrorMessage || 'Nenhum modelo do Gemini respondeu à leitura do documento.');
+  }
+
+  const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  const cleanJson = rawText.replace(/```json\n?|```/g, '').trim();
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleanJson);
+  } catch {
+    throw new Error('A IA não conseguiu estruturar os avisos do documento em JSON válido.');
+  }
+
+  const rawItems: any[] = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.items)
+    ? parsed.items
+    : [];
+
+  const validTypes = new Set(['EXAM', 'ASSIGNMENT', 'SUPPLY', 'PERMISSION', 'NOTE']);
+
+  return rawItems.map((raw, idx) => {
+    const itemType = validTypes.has(String(raw.type).toUpperCase())
+      ? (String(raw.type).toUpperCase() as ExtractedBoardItemDraft['type'])
+      : 'EXAM';
+
+    const rawChecklist = Array.isArray(raw.checklist) ? raw.checklist : [];
+    const checklist = rawChecklist
+      .map((entry: any, cIdx: number) => {
+        const text = typeof entry === 'string' ? entry.trim() : String(entry?.text || '').trim();
+        if (!text) return null;
+        return {
+          id: `chk-${Date.now()}-${idx}-${cIdx}`,
+          text,
+          done: false
+        };
+      })
+      .filter(Boolean) as { id: string; text: string; done: boolean }[];
+
+    const cleanDate =
+      typeof raw.due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.due_date.trim())
+        ? raw.due_date.trim()
+        : null;
+
+    return {
+      id: `draft-${Date.now()}-${idx}`,
+      selected: true,
+      type: itemType,
+      title: String(raw.title || 'Aviso Escolar').trim().slice(0, 140),
+      due_date: cleanDate,
+      subject: String(raw.subject || '').trim(),
+      grade_composition: String(raw.grade_composition || '').trim(),
+      study_tips: String(raw.study_tips || '').trim(),
+      delivery_format: String(raw.delivery_format || '').trim(),
+      estimated_cost: String(raw.estimated_cost || '').trim(),
+      notes: String(raw.notes || '').trim(),
+      checklist
+    };
+  });
+}
+

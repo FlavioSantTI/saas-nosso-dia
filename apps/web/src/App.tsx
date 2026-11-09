@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Family, FamilyMember, EventItem, Location, MemberRole } from './types';
+import { Family, FamilyMember, EventItem, Location, MemberRole, FamilyBoardItem, BoardItemType } from './types';
 import { Header } from './components/Header';
 import { WeekView } from './components/WeekView';
 import { DayView } from './components/DayView';
@@ -17,6 +17,18 @@ import { CalendarSearchModal } from './components/CalendarSearchModal';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import { BottomNavBar, BottomNavTab } from './components/BottomNavBar';
 import { BalanceView } from './components/BalanceView';
+import { BoardView } from './components/board/BoardView';
+import { BoardItemModal } from './components/board/BoardItemModal';
+import { BoardImportModal } from './components/board/BoardImportModal';
+import {
+  fetchBoardItems,
+  createBoardItem,
+  createBoardItemsBatch,
+  updateBoardItem,
+  deleteBoardItem,
+  CreateBoardItemInput,
+  groupBoardItemsByUrgency
+} from './lib/board';
 import { Onboarding } from './components/Onboarding';
 import { MemberAvatar } from './components/MemberAvatar';
 import { ActiveAlarmOverlay } from './components/ActiveAlarmOverlay';
@@ -392,6 +404,7 @@ export const App: React.FC = () => {
   const isLoadingDataRef = useRef(false);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [boardItems, setBoardItems] = useState<FamilyBoardItem[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
@@ -405,6 +418,12 @@ export const App: React.FC = () => {
   const [isUnassignedModalOpen, setIsUnassignedModalOpen] = useState(false);
   const [activeToastNotification, setActiveToastNotification] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  // Estados do Mural da Família (Board)
+  const [isBoardItemModalOpen, setIsBoardItemModalOpen] = useState(false);
+  const [editingBoardItem, setEditingBoardItem] = useState<FamilyBoardItem | null>(null);
+  const [boardModalInitialType, setBoardModalInitialType] = useState<BoardItemType>('EXAM');
+  const [isBoardImportModalOpen, setIsBoardImportModalOpen] = useState(false);
 
   // Estados de Autenticação Supabase
   const [currentUser, setCurrentUser] = useState<any | null>(null);
@@ -461,6 +480,8 @@ export const App: React.FC = () => {
     isSummaryModalOpen ||
     isSearchOpen ||
     isUnassignedModalOpen ||
+    isBoardItemModalOpen ||
+    isBoardImportModalOpen ||
     isAdminViewOpen;
 
   const {
@@ -841,6 +862,13 @@ export const App: React.FC = () => {
       }
 
       setEvents(dedupedEvents);
+
+      // 6.5 Carrega avisos do Mural da Família (Provas, Trabalhos, Materiais, Recados)
+      if (currentFamily?.id) {
+        fetchBoardItems(currentFamily.id, loadedMembers)
+          .then((loadedBoard) => setBoardItems(loadedBoard))
+          .catch((err) => console.warn('[Board] Erro ao carregar mural:', err));
+      }
 
       // 7. Materialização de longo prazo (90 dias) disparada em segundo plano com debounce
       if (typeof window !== 'undefined' && currentFamily.id) {
@@ -1718,6 +1746,94 @@ export const App: React.FC = () => {
     setManualAddInitialData(null);
   };
 
+  // =========================================================================
+  // HANDLERS DO MURAL DA FAMÍLIA (family_board_items)
+  // =========================================================================
+  const handleSaveBoardItem = async (input: CreateBoardItemInput, existingId?: string) => {
+    if (!family?.id) return;
+    try {
+      if (existingId) {
+        const updated = await updateBoardItem(existingId, family.id, input, members);
+        if (updated) {
+          setBoardItems((prev) => prev.map((b) => (b.id === existingId ? updated : b)));
+        }
+        showToast('Aviso do Mural atualizado com sucesso!', 'success');
+      } else {
+        const created = await createBoardItem(input, members);
+        setBoardItems((prev) => [created, ...prev]);
+        showToast('📌 Novo aviso publicado no Mural!', 'success');
+      }
+    } catch (err) {
+      console.error('Erro ao salvar item do Mural:', err);
+      showToast('Não foi possível salvar o aviso no Mural.', 'error');
+    }
+  };
+
+  const handleBatchSaveBoardItems = async (inputs: CreateBoardItemInput[]) => {
+    if (!family?.id || inputs.length === 0) return;
+    try {
+      const createdList = await createBoardItemsBatch(inputs, members);
+      setBoardItems((prev) => [...createdList, ...prev]);
+      setActiveTab('board');
+      showToast(`🎉 ${createdList.length} aviso(s) importado(s) para o Mural!`, 'success');
+    } catch (err) {
+      console.error('Erro na importação em lote do Mural:', err);
+      showToast('Erro ao importar avisos para o Mural.', 'error');
+    }
+  };
+
+  const handleDeleteBoardItem = async (itemId: string) => {
+    if (!family?.id) return;
+    const ok = await deleteBoardItem(itemId, family.id);
+    if (ok) {
+      setBoardItems((prev) => prev.filter((b) => b.id !== itemId));
+      showToast('Aviso removido do Mural.', 'info');
+    }
+  };
+
+  const handleToggleBoardChecklistItem = async (item: FamilyBoardItem, checklistItemId: string) => {
+    if (!family?.id) return;
+    const nextChecklist = (item.checklist || []).map((c) =>
+      c.id === checklistItemId ? { ...c, done: !c.done } : c
+    );
+    // Atualização otimista
+    setBoardItems((prev) =>
+      prev.map((b) => (b.id === item.id ? { ...b, checklist: nextChecklist } : b))
+    );
+    await updateBoardItem(item.id, family.id, { checklist: nextChecklist }, members);
+  };
+
+  const handleToggleBoardPin = async (item: FamilyBoardItem) => {
+    if (!family?.id) return;
+    const nextPinned = !item.is_pinned;
+    setBoardItems((prev) =>
+      prev.map((b) => (b.id === item.id ? { ...b, is_pinned: nextPinned } : b))
+    );
+    await updateBoardItem(item.id, family.id, { is_pinned: nextPinned }, members);
+    showToast(nextPinned ? '📌 Aviso fixado no topo do Mural!' : 'Aviso desafixado.', 'info');
+  };
+
+  const handleToggleBoardComplete = async (item: FamilyBoardItem) => {
+    if (!family?.id) return;
+    const nextStatus = item.status === 'DONE' ? 'OPEN' : 'DONE';
+    const completedAt = nextStatus === 'DONE' ? new Date().toISOString() : null;
+    setBoardItems((prev) =>
+      prev.map((b) =>
+        b.id === item.id ? { ...b, status: nextStatus, completed_at: completedAt } : b
+      )
+    );
+    await updateBoardItem(
+      item.id,
+      family.id,
+      { status: nextStatus, completed_at: completedAt },
+      members
+    );
+    showToast(
+      nextStatus === 'DONE' ? '✅ Aviso marcado como concluído!' : 'Aviso reaberto no Mural.',
+      'success'
+    );
+  };
+
   // 1. Tela de Carregamento Inicial Neutra (evita qualquer flash de tela antes da verificação da sessão)
   if (isInitialLoading) {
     return (
@@ -1959,10 +2075,13 @@ export const App: React.FC = () => {
               <DailyBriefingCard
                 familyId={family?.id}
                 events={events}
+                boardItems={boardItems}
                 members={members}
                 currentMember={currentMember}
                 onCardClick={handleCardClick}
                 onOpenSummary={handleOpenSummary}
+                onOpenBoard={() => setActiveTab('board')}
+                onOpenBalance={() => setActiveTab('balance')}
                 onEventsChanged={loadData}
                 onNotify={showToast}
                 onOpenSearch={() => setIsSearchOpen(true)}
@@ -1976,7 +2095,31 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Aba 3: Balanço Semanal da Família */}
+          {/* Aba 3: Mural da Família (Provas, Trabalhos, Materiais, Autorizações e Recados) */}
+          {activeTab === 'board' && (
+            <BoardView
+              items={boardItems}
+              members={members}
+              selectedMemberId={selectedMemberId}
+              onSelectMember={setSelectedMemberId}
+              onOpenCreateModal={(initialType = 'EXAM') => {
+                setEditingBoardItem(null);
+                setBoardModalInitialType(initialType);
+                setIsBoardItemModalOpen(true);
+              }}
+              onOpenEditModal={(item) => {
+                setEditingBoardItem(item);
+                setIsBoardItemModalOpen(true);
+              }}
+              onOpenImportModal={() => setIsBoardImportModalOpen(true)}
+              onToggleChecklistItem={handleToggleBoardChecklistItem}
+              onTogglePin={handleToggleBoardPin}
+              onToggleComplete={handleToggleBoardComplete}
+              onOpenBalanceView={() => setActiveTab('balance')}
+            />
+          )}
+
+          {/* Aba 4: Balanço Semanal da Família */}
           {activeTab === 'balance' && (
             <BalanceView
               events={events}
@@ -2005,9 +2148,46 @@ export const App: React.FC = () => {
           setManualAddInitialData(null);
           setIsManualAddOpen(true);
         }}
+        onOpenNewBoardItem={() => {
+          setEditingBoardItem(null);
+          setBoardModalInitialType('EXAM');
+          setIsBoardItemModalOpen(true);
+        }}
+        onOpenBoardImportAI={() => setIsBoardImportModalOpen(true)}
         onOpenSearch={() => setIsSearchOpen(true)}
         todayEventsCount={todayEventsCount}
         unassignedCount={unassignedCount}
+        urgentBoardCount={(() => {
+          const grouped = groupBoardItemsByUrgency(boardItems);
+          return grouped.overdue.length + grouped.todayTomorrow.length;
+        })()}
+      />
+
+      {/* Modal: Criar / Editar Aviso do Mural */}
+      <BoardItemModal
+        isOpen={isBoardItemModalOpen}
+        onClose={() => {
+          setIsBoardItemModalOpen(false);
+          setEditingBoardItem(null);
+        }}
+        familyId={family.id}
+        members={members}
+        currentMember={currentMember}
+        editingItem={editingBoardItem}
+        initialType={boardModalInitialType}
+        onSave={handleSaveBoardItem}
+        onDelete={handleDeleteBoardItem}
+      />
+
+      {/* Modal: Importar Comunicado / Roteiro de Provas via IA */}
+      <BoardImportModal
+        isOpen={isBoardImportModalOpen}
+        onClose={() => setIsBoardImportModalOpen(false)}
+        familyId={family.id}
+        members={members}
+        currentMember={currentMember}
+        existingItems={boardItems}
+        onBatchSave={handleBatchSaveBoardItems}
       />
 
       {/* Modal: Captura com IA */}

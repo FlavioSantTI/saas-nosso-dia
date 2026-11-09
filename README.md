@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v2.3.4-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v3.0.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -34,6 +34,20 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
 ---
 
 ## ✨ Principais Funcionalidades
+
+### 📌 0. Mural da Família & Escola + Importação de Documentos com IA (Novo na v3.0!)
+- **Separação Inteligente entre Horários e Prazos:** Enquanto a **Agenda** organiza compromissos com hora marcada (natação, consultas, caronas), o **Mural da Família** organiza demandas de atenção e prazo sem poluir a grade de horários.
+- **5 Categorias de Avisos:**
+  - 📝 **Avaliação / Prova (`EXAM`):** Disciplina, data da prova, composição detalhada da nota, sugestões de estudo e checklist de capítulos.
+  - 📚 **Trabalho / Entrega (`ASSIGNMENT`):** Projetos bimestrais, leituras de livros paradidáticos, formato de entrega e pontuação.
+  - 🛒 **Material / Compra (`SUPPLY`):** Lista de materiais escolares, cartolinas, uniformes, valor estimado e onde comprar.
+  - ✍️ **Autorização / Documento (`PERMISSION`):** Assinatura de autorizações de passeio, renovação de matrícula e taxas.
+  - 💬 **Recado Geral (`NOTE`):** Avisos gerais da casa e comunicados sem horário fixo.
+- **Importação em Lote de Comunicados via IA (`BoardImportModal.tsx`):**
+  - Envie o **PDF**, **Word (`.docx`/`.doc`)** ou **Foto (`.png`/`.jpg`)** do roteiro de provas ou circular escolar.
+  - A IA extrai todas as datas de provas de uma só vez, mantém matérias do mesmo dia aglutinadas conforme o comunicado, converte cada capítulo em um checklist interativo de estudo e separa automaticamente os **trabalhos embutidos na composição da nota** como cards de entrega (`ASSIGNMENT`).
+- **Anexo do Comunicado Original (`📎 Ver original`):** O documento original fica salvo no Supabase Storage (`board-attachments`) e vinculado a todos os cards gerados para visualização imediata em modal (PDF, Imagem ou texto extraído).
+- **Widget "🎯 No Radar do Mural" em Meu Dia:** Exibe automaticamente provas e entregas dos próximos 3 dias diretamente no resumo matinal da família.
 
 ### 🔍 1. Busca Rápida de Atividades & Aniversários Familiares
 - **Busca por Palavra-Chave:** Encontre qualquer compromisso ou rotina digitando termos diretos (ex.: `unimed`, `voleibol`, `aniversario`, `terapia`).
@@ -205,6 +219,26 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v3.0.0] — 2026-11-08
+#### 📌 Marco 3.0: Mural da Família & Escola, Importação Documental em Lote com IA e Anexo Original
+- **Novo Módulo "Mural da Família & Escola" (`family_board_items`, `BoardView.tsx`, `BoardItemModal.tsx`):**
+  - Espaço dedicado para atividades de atenção, estudo e prazos que não possuem horário fixo na grade do calendário.
+  - CRUD completo para 5 categorias: **📝 Avaliação/Prova (`EXAM`)**, **📚 Trabalho/Entrega (`ASSIGNMENT`)**, **🛒 Material/Compra (`SUPPLY`)**, **✍️ Autorização/Doc (`PERMISSION`)** e **💬 Recado Geral (`NOTE`)**.
+  - Agrupamento automático por urgência temporal: *📌 Fixados no Topo*, *🔴 Atrasados*, *🟠 Hoje e Amanhã*, *🟡 Esta Semana (Próximos 7 dias)* e *⚪ Próximas Semanas / Sem Data Fixa*.
+  - **Checklist Interativo de Estudo nos Cards:** Marque capítulos estudados ou itens comprados diretamente no card com barra de progresso em tempo real (`2/4 tópicos - 50%`).
+- **Importação em Lote de Roteiros de Provas e Comunicados com IA (`BoardImportModal.tsx`, `extractBoardItemsWithGemini`):**
+  - Upload multimodal de **PDF**, **Word (`.docx`, `.doc`)**, **Imagens (`.png`, `.jpg`, `.webp`)** ou texto colado.
+  - **Aglutinação Fiel ao Comunicado:** Matérias aplicadas no mesmo dia na tabela escolar (ex.: *26/11 — História e Geografia*) são mantidas aglutinadas em um único card de avaliação com os capítulos de ambas organizados no checklist.
+  - **Extração Automática de Trabalhos Embutidos:** Trabalhos mencionados na coluna de composição da nota ou rodapé (ex.: *Trabalho do livro Paradidático*, *Projeto Bimestral de Inglês*, *Trabalhos de Arte/LIV*) são extraídos automaticamente como cards do tipo `ASSIGNMENT`.
+  - **Preview Interativo com Detecção de Duplicidade:** Tela de revisão em lote permitindo marcar/desmarcar itens, editar títulos/datas/categorias inline e identificar avisos que já existem no Mural antes de salvar.
+- **Armazenamento e Visualizador do Comunicado Original (`board-attachments`):**
+  - Upload único do documento original no Supabase Storage vinculado a todos os cards gerados pelo lote.
+  - Botão **`📎 Ver original`** direto no card abrindo modal de leitura rápida para PDF, zoom de imagem ou texto integral extraído do Word, além de botão de download.
+- **Nova Arquitetura de Navegação Mobile-First & Integração com "Meu Dia" (`BottomNavBar.tsx`, `DailyBriefingCard.tsx`):**
+  - Aba **Mural** integrada na barra de navegação inferior (`Agenda | Meu Dia | + | Mural | Família`) com badge contador de itens urgentes (hoje/amanhã/atrasados).
+  - Menu central **`+`** expandido com atalhos diretos para *"Importar Roteiro de Provas / PDF (IA)"* e *"Novo Aviso no Mural"*, mantendo o **Balanço da Semana** acessível a 1 toque no menu `+`, no cabeçalho do Mural e dentro de **Meu Dia**.
+  - Nova seção **"🎯 No Radar do Mural"** dentro do `DailyBriefingCard` (*Meu Dia*), exibindo automaticamente provas e entregas dos próximos 3 dias.
 
 ### [v2.3.4] — 2026-11-08
 #### 🔔 Arquitetura Completa de Web Push Notifications, Service Worker e Alarme Sonoro

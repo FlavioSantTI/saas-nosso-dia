@@ -157,3 +157,50 @@ export interface DailyBriefingItem {
   participants: DailyBriefingParticipant[];
   has_conflict: boolean;
 }
+
+export type BoardItemType = 'EXAM' | 'ASSIGNMENT' | 'SUPPLY' | 'PERMISSION' | 'NOTE';
+export type BoardItemStatus = 'OPEN' | 'DONE' | 'ARCHIVED';
+
+export interface BoardChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface BoardItemDetails {
+  subject?: string;
+  grade_composition?: string;
+  study_tips?: string;
+  delivery_format?: string;
+  estimated_cost?: string;
+  store_or_link?: string;
+  event_location?: string;
+}
+
+export interface FamilyBoardItem {
+  id: string;
+  family_id: string;
+  type: BoardItemType;
+  title: string;
+  notes?: string | null;
+  due_date?: string | null; // YYYY-MM-DD
+  related_member_id?: string | null;
+  assigned_to_id?: string | null;
+  details: BoardItemDetails;
+  checklist: BoardChecklistItem[];
+  status: BoardItemStatus;
+  is_pinned: boolean;
+  attachment_path?: string | null;
+  attachment_name?: string | null;
+  attachment_mime?: string | null;
+  attachment_extracted_text?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at?: string;
+  completed_at?: string | null;
+
+  // Virtual relations populated in client
+  related_member?: FamilyMember | null;
+  assigned_to?: FamilyMember | null;
+}
+

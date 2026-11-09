@@ -4,11 +4,15 @@
 
 const webpush = require('web-push');
 
-const VAPID_PUBLIC_KEY = 'BLo7yZV7Vn4puRcRhvbqQyxVv-b5tU5gZE32Km0FqSLGR81rH31aCbzz3RsRBLzH5cg4OkhW2OGQR6E0fXANmeQ';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'qVx8K5sqjieCQqYtFEwFSWFQ070JfyWey8SM7JQRvZo';
+const VAPID_PUBLIC_KEY = process.env.VITE_VAPID_PUBLIC_KEY || 'BLo7yZV7Vn4puRcRhvbqQyxVv-b5tU5gZE32Km0FqSLGR81rH31aCbzz3RsRBLzH5cg4OkhW2OGQR6E0fXANmeQ';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 const VAPID_SUBJECT = 'mailto:contato@nossodia.flaviosantiago.com.br';
 
-webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+if (!VAPID_PRIVATE_KEY) {
+  console.warn('⚠️ Defina a variável de ambiente VAPID_PRIVATE_KEY antes de disparar notificações push.');
+} else {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
 
 async function sendPush(subscription, payload) {
   try {
