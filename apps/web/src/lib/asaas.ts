@@ -60,11 +60,30 @@ export async function getAsaasConfig(): Promise<{
     // Fallback para variáveis de ambiente
   }
 
+  // Detecta automaticamente o ambiente pelo prefixo oficial da chave Asaas ($aact_hmlg_ vs $aact_prod_)
+  if (apiKey.includes('_hmlg_')) {
+    environment = 'sandbox';
+  } else if (apiKey.includes('_prod_')) {
+    environment = 'production';
+  }
+
+  const proxyBase = environment === 'production' ? '/api/asaas-prod' : '/api/asaas-sandbox';
+  const directBase = environment === 'production' ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3';
   const baseUrl =
     import.meta.env.VITE_ASAAS_API_URL ||
-    (environment === 'production' ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3');
+    (typeof window !== 'undefined' ? proxyBase : directBase);
 
   return { apiKey, environment, baseUrl };
+}
+
+function normalizeAsaasFetchError(err: any): Error {
+  const msg = err?.message || '';
+  if (err instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(msg)) {
+    return new Error(
+      'Não foi possível conectar ao gateway Asaas (CORS/rede). Verifique se o proxy do servidor (/api/asaas-sandbox) ou a Edge Function asaas-checkout estão atualizados.'
+    );
+  }
+  return err instanceof Error ? err : new Error(msg || 'Erro desconhecido ao comunicar com o Asaas.');
 }
 
 export interface AsaasCustomer {
@@ -147,8 +166,75 @@ export async function createAsaasCustomer(
     };
   } catch (err: any) {
     console.error('[Asaas] Falha ao criar cliente:', err);
-    throw err;
+    throw normalizeAsaasFetchError(err);
   }
+}
+
+async function resolveOrCreateAsaasCustomerId(
+  baseUrl: string,
+  apiKey: string,
+  candidateId: string,
+  options?: {
+    familyId?: string;
+    customerName?: string;
+    customerEmail?: string;
+    cpfCnpj?: string;
+  }
+): Promise<string> {
+  const isSynthetic =
+    !candidateId || candidateId.startsWith('cus_fam_') || candidateId.startsWith('cus_sim_');
+  if (!isSynthetic) {
+    return candidateId;
+  }
+
+  const cleanCpfCnpj = options?.cpfCnpj ? options.cpfCnpj.replace(/\D/g, '') : undefined;
+
+  // Tenta localizar cliente já cadastrado pelo CPF/CNPJ no Asaas para evitar duplicidade
+  if (cleanCpfCnpj) {
+    const searchRes = await fetch(
+      `${baseUrl}/customers?cpfCnpj=${encodeURIComponent(cleanCpfCnpj)}`,
+      { headers: { access_token: apiKey } }
+    );
+    if (searchRes.ok) {
+      const searchJson = await searchRes.json().catch(() => ({}));
+      const existingId = searchJson?.data?.[0]?.id;
+      if (existingId) {
+        return existingId;
+      }
+    }
+  }
+
+  const fallbackEmail =
+    options?.customerEmail?.trim() ||
+    `assinatura-${(options?.familyId || 'familia').slice(0, 8)}@nossodia.app`;
+
+  const createRes = await fetch(`${baseUrl}/customers`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      access_token: apiKey,
+    },
+    body: JSON.stringify({
+      name: options?.customerName?.trim() || 'Titular Nosso Dia',
+      email: fallbackEmail,
+      cpfCnpj: cleanCpfCnpj,
+      externalReference: options?.familyId || undefined,
+      notificationDisabled: false,
+    }),
+  });
+
+  if (!createRes.ok) {
+    const errData = await createRes.json().catch(() => ({}));
+    throw new Error(
+      errData?.errors?.[0]?.description || `Erro ao cadastrar cliente no Asaas (${createRes.status})`
+    );
+  }
+
+  const created = await createRes.json();
+  if (!created?.id) {
+    throw new Error('Asaas não retornou o identificador do cliente (cus_...).');
+  }
+  return created.id;
 }
 
 /**
@@ -220,6 +306,13 @@ export async function createSubscription(
     };
   } else {
     try {
+      const resolvedCustomerId = await resolveOrCreateAsaasCustomerId(
+        baseUrl,
+        apiKey,
+        customerId,
+        options
+      );
+
       const res = await fetch(`${baseUrl}/subscriptions`, {
         method: 'POST',
         headers: {
@@ -227,7 +320,7 @@ export async function createSubscription(
           access_token: apiKey,
         },
         body: JSON.stringify({
-          customer: customerId,
+          customer: resolvedCustomerId,
           billingType: paymentMethod,
           value: valueInReais,
           nextDueDate: tomorrow,
@@ -287,7 +380,7 @@ export async function createSubscription(
       };
     } catch (err: any) {
       console.error('[Asaas] Falha ao criar assinatura:', err);
-      throw err;
+      throw normalizeAsaasFetchError(err);
     }
   }
 
@@ -301,7 +394,7 @@ export async function createSubscription(
         .maybeSingle();
 
       const updatePayload: Record<string, any> = {
-        asaas_customer_id: customerId,
+        asaas_customer_id: subResponse.customer || customerId,
         asaas_subscription_id: subResponse.id,
         billing_type: paymentMethod,
         billing_cycle: cycle,

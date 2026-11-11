@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v3.1.1-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v3.1.2-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -230,6 +230,14 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v3.1.2] — 2026-11-11
+#### 🔌 Proxy Same-Origin Asaas (Nginx/Vite) & Resolução Automática de Cliente/Ambiente
+- **Eliminação de `Failed to fetch` (CORS + CSP) no Checkout Asaas (`nginx.conf`, `vite.config.ts`, `asaas.ts`):**
+  - Adicionados endpoints de proxy reverso same-origin `/api/asaas-sandbox/` e `/api/asaas-prod/` no Nginx de produção (`nginx.conf`) e no servidor de desenvolvimento (`vite.config.ts`), além de atualização do cabeçalho `Content-Security-Policy` (`connect-src`).
+  - Atualizado `getAsaasConfig()` em `asaas.ts` para rotear chamadas do navegador pelo proxy same-origin e auto-detectar o ambiente pelo prefixo oficial da chave Asaas (`$aact_hmlg_` → Sandbox, `$aact_prod_` → Produção).
+- **Resolução de Cliente Real antes da Assinatura (`asaas.ts`):**
+  - Antes de chamar `POST /subscriptions`, o sistema agora consulta por CPF/CNPJ (`GET /customers?cpfCnpj=...`) ou cria um cliente real (`POST /customers`) quando o identificador ainda for sintético (`cus_fam_...`), persistindo o `cus_...` oficial no Supabase e exibindo mensagens de erro de rede legíveis via `normalizeAsaasFetchError()`.
 
 ### [v3.1.1] — 2026-11-11
 #### 🐛 Correção de Sobreposição (`z-index`) de Notificações Toast e Validação Inline no Checkout Asaas

@@ -32,6 +32,18 @@ export default defineConfig({
     }
   ],
   server: {
-    port: 5173
+    port: 5173,
+    proxy: {
+      '/api/asaas-sandbox': {
+        target: 'https://sandbox.asaas.com/api/v3',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/asaas-sandbox/, '')
+      },
+      '/api/asaas-prod': {
+        target: 'https://api.asaas.com/v3',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/asaas-prod/, '')
+      }
+    }
   }
 });
