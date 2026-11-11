@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v3.1.2-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v3.1.3-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -230,6 +230,12 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v3.1.3] — 2026-11-11
+#### 🔑 Correção de HTTP 401 no Proxy Nginx Asaas (`underscores_in_headers` & `X-Asaas-Access-Token`)
+- **Preservação do Token de Autenticação através do Nginx (`nginx.conf`, `asaas.ts`):**
+  - Habilitado `underscores_in_headers on;` no `nginx.conf` e mapeado o header seguro com hífen `X-Asaas-Access-Token` para `access_token` nos proxies reversos `/api/asaas-sandbox/` e `/api/asaas-prod/`, evitando que o Nginx ou proxies externos removam o cabeçalho `access_token` (causa do HTTP 401).
+  - Centralizados os cabeçalhos em `buildAsaasHeaders()` e o tratamento padronizado de respostas HTTP/401 em `parseAsaasError()` no módulo `asaas.ts`.
 
 ### [v3.1.2] — 2026-11-11
 #### 🔌 Proxy Same-Origin Asaas (Nginx/Vite) & Resolução Automática de Cliente/Ambiente

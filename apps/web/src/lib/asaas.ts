@@ -86,6 +86,36 @@ function normalizeAsaasFetchError(err: any): Error {
   return err instanceof Error ? err : new Error(msg || 'Erro desconhecido ao comunicar com o Asaas.');
 }
 
+function buildAsaasHeaders(apiKey: string, includeJsonContentType = false): Record<string, string> {
+  // Envia também via X-Asaas-Access-Token para sobreviver a proxies Nginx que removem headers com underscore
+  const headers: Record<string, string> = {
+    access_token: apiKey,
+    'X-Asaas-Access-Token': apiKey,
+  };
+  if (includeJsonContentType) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
+}
+
+async function parseAsaasError(
+  res: Response,
+  fallbackMessage: string,
+  environment: 'sandbox' | 'production'
+): Promise<Error> {
+  const errData = await res.json().catch(() => ({}));
+  const apiDescription = errData?.errors?.[0]?.description || errData?.message;
+  if (apiDescription) {
+    return new Error(apiDescription);
+  }
+  if (res.status === 401) {
+    return new Error(
+      `Chave de API Asaas recusada ou ausente no ambiente ${environment.toUpperCase()} (HTTP 401). Verifique no Super-Admin se a chave ($aact_${environment === 'production' ? 'prod' : 'hmlg'}_...) é válida.`
+    );
+  }
+  return new Error(`${fallbackMessage} (${res.status})`);
+}
+
 export interface AsaasCustomer {
   id: string;
   name: string;
@@ -125,7 +155,7 @@ export async function createAsaasCustomer(
   email: string,
   cpfCnpj?: string
 ): Promise<AsaasCustomer> {
-  const { apiKey, baseUrl } = await getAsaasConfig();
+  const { apiKey, environment, baseUrl } = await getAsaasConfig();
   const cleanCpfCnpj = cpfCnpj ? cpfCnpj.replace(/\D/g, '') : undefined;
 
   if (!apiKey) {
@@ -141,10 +171,7 @@ export async function createAsaasCustomer(
   try {
     const res = await fetch(`${baseUrl}/customers`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        access_token: apiKey,
-      },
+      headers: buildAsaasHeaders(apiKey, true),
       body: JSON.stringify({
         name,
         email,
@@ -153,8 +180,7 @@ export async function createAsaasCustomer(
     });
 
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.errors?.[0]?.description || `Erro HTTP Asaas: ${res.status}`);
+      throw await parseAsaasError(res, 'Erro HTTP Asaas', environment);
     }
 
     const data = await res.json();
@@ -173,6 +199,7 @@ export async function createAsaasCustomer(
 async function resolveOrCreateAsaasCustomerId(
   baseUrl: string,
   apiKey: string,
+  environment: 'sandbox' | 'production',
   candidateId: string,
   options?: {
     familyId?: string;
@@ -193,7 +220,7 @@ async function resolveOrCreateAsaasCustomerId(
   if (cleanCpfCnpj) {
     const searchRes = await fetch(
       `${baseUrl}/customers?cpfCnpj=${encodeURIComponent(cleanCpfCnpj)}`,
-      { headers: { access_token: apiKey } }
+      { headers: buildAsaasHeaders(apiKey) }
     );
     if (searchRes.ok) {
       const searchJson = await searchRes.json().catch(() => ({}));
@@ -210,10 +237,7 @@ async function resolveOrCreateAsaasCustomerId(
 
   const createRes = await fetch(`${baseUrl}/customers`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      access_token: apiKey,
-    },
+    headers: buildAsaasHeaders(apiKey, true),
     body: JSON.stringify({
       name: options?.customerName?.trim() || 'Titular Nosso Dia',
       email: fallbackEmail,
@@ -224,10 +248,7 @@ async function resolveOrCreateAsaasCustomerId(
   });
 
   if (!createRes.ok) {
-    const errData = await createRes.json().catch(() => ({}));
-    throw new Error(
-      errData?.errors?.[0]?.description || `Erro ao cadastrar cliente no Asaas (${createRes.status})`
-    );
+    throw await parseAsaasError(createRes, 'Erro ao cadastrar cliente no Asaas', environment);
   }
 
   const created = await createRes.json();
@@ -281,7 +302,7 @@ export async function createSubscription(
     // Segue para execução direta / sandbox caso a Edge Function não esteja publicada
   }
 
-  const { apiKey, baseUrl } = await getAsaasConfig();
+  const { apiKey, environment, baseUrl } = await getAsaasConfig();
 
   let subResponse: AsaasSubscriptionResponse;
 
@@ -309,16 +330,14 @@ export async function createSubscription(
       const resolvedCustomerId = await resolveOrCreateAsaasCustomerId(
         baseUrl,
         apiKey,
+        environment,
         customerId,
         options
       );
 
       const res = await fetch(`${baseUrl}/subscriptions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          access_token: apiKey,
-        },
+        headers: buildAsaasHeaders(apiKey, true),
         body: JSON.stringify({
           customer: resolvedCustomerId,
           billingType: paymentMethod,
@@ -331,8 +350,7 @@ export async function createSubscription(
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData?.errors?.[0]?.description || `Erro ao gerar assinatura no Asaas (${res.status})`);
+        throw await parseAsaasError(res, 'Erro ao gerar assinatura no Asaas', environment);
       }
 
       const data = await res.json();
@@ -343,7 +361,7 @@ export async function createSubscription(
       // Busca a 1ª cobrança gerada pela assinatura para extrair o link da fatura e o QR Code Pix
       try {
         const paymentsRes = await fetch(`${baseUrl}/subscriptions/${data.id}/payments`, {
-          headers: { access_token: apiKey }
+          headers: buildAsaasHeaders(apiKey)
         });
         if (paymentsRes.ok) {
           const paymentsJson = await paymentsRes.json();
@@ -352,7 +370,7 @@ export async function createSubscription(
             invoiceUrl = firstPayment.invoiceUrl || firstPayment.bankSlipUrl || invoiceUrl;
             if (paymentMethod === 'PIX' && firstPayment.id) {
               const pixRes = await fetch(`${baseUrl}/payments/${firstPayment.id}/pixQrCode`, {
-                headers: { access_token: apiKey }
+                headers: buildAsaasHeaders(apiKey)
               });
               if (pixRes.ok) {
                 const pixJson = await pixRes.json();
