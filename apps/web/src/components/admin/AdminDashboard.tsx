@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plan, TenantBillingInfo, PlatformSettings, AdminUserListItem } from '../../types';
+import { Plan, TenantBillingInfo, PlatformSettings, AdminUserListItem, AiUsageLogItem } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { formatCentsToBRL } from '../../lib/asaas';
+import { fetchAiUsageLogsForAdmin } from '../../lib/gemini';
 import { AdminUserManagement } from './AdminUserManagement';
 import {
   ShieldAlert,
@@ -74,55 +75,75 @@ const MEMBER_COLOR_PALETTE = [
 const DEFAULT_PLANS: Plan[] = [
   {
     id: 'd1111111-1111-1111-1111-111111111111',
-    name: 'Degustação (Trial)',
+    name: 'Degustação (14 Dias)',
     slug: 'trial',
     price_cents: 0,
     billing_interval: 'MONTHLY',
     max_members: 4,
     has_ai_access: true,
-    features: ['Até 4 membros familiares', 'Sincronização em tempo real', 'Captura com Inteligência Artificial (14 dias)'],
+    features: [
+      'Até 4 membros da família',
+      '15 créditos de IA para testar',
+      'Mural Escolar: 1 importação gratuita de PDF/Foto',
+      'Agenda Inteligente por Texto'
+    ],
     is_active: true,
-    monthly_ai_credits: 30,
-    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
+    monthly_ai_credits: 15,
+    allowed_ai_modalities: ['TEXT', 'PDF'],
   },
   {
     id: 'd2222222-2222-2222-2222-222222222222',
     name: 'Família Essencial',
     slug: 'essencial',
-    price_cents: 2990,
+    price_cents: 5990,
     billing_interval: 'MONTHLY',
     max_members: 5,
-    has_ai_access: false,
-    features: ['Até 5 membros', 'Sincronização ilimitada', 'Painel de Resumo & Balanço', 'Lembretes'],
+    has_ai_access: true,
+    features: [
+      'Até 5 membros da família',
+      '60 créditos de IA por mês',
+      'Mural Escolar: até 2 importações de PDF/Foto por mês',
+      'Agenda Inteligente via Texto e Áudio'
+    ],
     is_active: true,
-    monthly_ai_credits: 0,
-    allowed_ai_modalities: [],
+    monthly_ai_credits: 60,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
   },
   {
     id: 'd3333333-3333-3333-3333-333333333333',
     name: 'Família Pro IA',
     slug: 'pro-ia',
-    price_cents: 4990,
+    price_cents: 8990,
     billing_interval: 'MONTHLY',
-    max_members: 10,
+    max_members: 8,
     has_ai_access: true,
-    features: ['Até 10 membros', 'Captura com Gemini IA', 'Briefing Matinal', 'Suporte VIP'],
+    features: [
+      'Até 8 membros da família',
+      '160 créditos de IA por mês (Multimodal Completo)',
+      'Mural Escolar: Importação ILIMITADA de PDFs, Word e Fotos',
+      'Aglutinação de Provas, Checklists e Trabalhos Embutidos'
+    ],
     is_active: true,
-    monthly_ai_credits: 100,
-    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
+    monthly_ai_credits: 160,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF', 'DOCX'],
   },
   {
     id: 'd4444444-4444-4444-4444-444444444444',
     name: 'Família Pro IA Anual',
     slug: 'pro-ia-anual',
-    price_cents: 47880,
+    price_cents: 87990,
     billing_interval: 'YEARLY',
     max_members: 10,
     has_ai_access: true,
-    features: ['2 meses grátis', 'Acesso completo IA', 'Membros ilimitados', 'Briefing e Resumo'],
+    features: [
+      'Economia de R$ 198,90 no ano (equivale a R$ 73,32/mês)',
+      'Até 10 membros da família',
+      'Dobro de IA: 320 créditos de IA todo mês',
+      'Mural Escolar Ilimitado (PDFs, Word e Fotos) + Anexos'
+    ],
     is_active: true,
-    monthly_ai_credits: 150,
-    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
+    monthly_ai_credits: 320,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF', 'DOCX'],
   },
 ];
 
@@ -139,9 +160,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>({
     id: '',
     ai_cost_text: 1,
-    ai_cost_audio: 1,
+    ai_cost_audio: 2,
     ai_cost_image: 3,
-    ai_cost_pdf: 10,
+    ai_cost_pdf: 5,
     ai_enabled: true,
     updated_at: new Date().toISOString(),
   });
@@ -150,7 +171,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [planSavingId, setPlanSavingId] = useState<string | null>(null);
   const [planSaveToast, setPlanSaveToast] = useState<{ [planId: string]: string }>({});
 
-  // Gestão da Chave de API de IA (Google Gemini 1.5 Flash - Criptografia AES-256)
+  // Gestão da Chave de API de IA (Google Gemini - Criptografia AES-256)
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [isSavingAiKey, setIsSavingAiKey] = useState(false);
@@ -161,6 +182,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     description: string | null;
     updated_at: string;
   }[]>([]);
+
+  // Cofre Asaas (AES-256) & Logs de Auditoria de Tokens IA
+  const [asaasApiKeyInput, setAsaasApiKeyInput] = useState('');
+  const [asaasEnvInput, setAsaasEnvInput] = useState<'sandbox' | 'production'>('sandbox');
+  const [asaasWebhookSecretInput, setAsaasWebhookSecretInput] = useState('');
+  const [showAsaasKey, setShowAsaasKey] = useState(false);
+  const [isSavingAsaasVault, setIsSavingAsaasVault] = useState(false);
+  const [asaasVaultFeedback, setAsaasVaultFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [aiUsageLogs, setAiUsageLogs] = useState<AiUsageLogItem[]>([]);
 
   // Dados de Tenants e Cobrança
   const [tenants, setTenants] = useState<TenantBillingInfo[]>([]);
@@ -358,6 +388,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .select('family_id, name, user_id')
         .eq('role', 'ADMIN');
 
+      // 2.4.1 Carrega Logs de Auditoria de Tokens IA (ai_usage_logs)
+      const loadedLogs = await fetchAiUsageLogsForAdmin(200);
+      setAiUsageLogs(loadedLogs);
+
+      // Agrega tokens e custos reais por família a partir dos logs de auditoria
+      const familyUsageAgg = new Map<
+        string,
+        {
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+          pdf_imports_count: number;
+          estimated_cost_usd: number;
+        }
+      >();
+
+      for (const log of loadedLogs) {
+        if (log.status !== 'SUCCESS') continue;
+        const curr = familyUsageAgg.get(log.family_id) || {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          pdf_imports_count: 0,
+          estimated_cost_usd: 0
+        };
+        curr.prompt_tokens += Number(log.prompt_tokens || 0);
+        curr.completion_tokens += Number(log.completion_tokens || 0);
+        curr.total_tokens += Number(log.total_tokens || 0);
+        if (log.feature === 'BOARD_IMPORT') {
+          curr.pdf_imports_count += 1;
+        }
+        curr.estimated_cost_usd += Number(log.estimated_cost_usd || 0);
+        familyUsageAgg.set(log.family_id, curr);
+      }
+
       const subsMap = new Map((subsData || []).map((s) => [s.family_id, s]));
       const adminMap = new Map((adultMembers || []).map((m) => [m.family_id, m]));
 
@@ -366,16 +431,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const sub = subsMap.get(f.id);
           const admin = adminMap.get(f.id);
           const currentPlan = plans.find((p) => p.id === sub?.plan_id) || plans[0];
+          const agg = familyUsageAgg.get(f.id);
 
           return {
             family_id: f.id,
             family_name: f.name || 'Família',
             owner_email: currentUser?.email && admin ? currentUser.email : `responsavel@${f.name.toLowerCase().replace(/\s+/g, '')}.com`,
-            plan_name: sub?.plan?.name || currentPlan?.name || 'Degustação (Trial)',
+            plan_name: sub?.plan?.name || currentPlan?.name || 'Degustação (14 Dias)',
             status: sub?.status || 'TRIAL',
             created_at: f.created_at || new Date().toISOString(),
             current_period_end: sub?.current_period_end || new Date(Date.now() + 14 * 86400000).toISOString(),
             ai_credits_used: sub?.ai_credits_used ?? 0,
+            ai_credits_limit: sub?.plan?.monthly_ai_credits ?? currentPlan?.monthly_ai_credits ?? 15,
+            prompt_tokens_total: agg?.prompt_tokens ?? 0,
+            completion_tokens_total: agg?.completion_tokens ?? 0,
+            total_tokens_used: agg?.total_tokens ?? 0,
+            pdf_imports_count: agg?.pdf_imports_count ?? 0,
+            estimated_cost_usd: agg?.estimated_cost_usd ?? 0
           };
         });
         setTenants(enriched);
@@ -595,20 +667,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // -------------------------------------------------------------
-  // Cálculos de Consumo Geral de IA (Seção 3)
+  // Cálculos de Consumo Geral e Auditoria Real de Tokens de IA (Seção 3)
   // -------------------------------------------------------------
   const totalAiCreditsUsed = useMemo(() => {
     return tenants.reduce((acc, t) => acc + (t.ai_credits_used || 0), 0);
   }, [tenants]);
 
-  const estimatedAiCostBrl = useMemo(() => {
-    const cost = totalAiCreditsUsed * 0.02;
-    return cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  }, [totalAiCreditsUsed]);
+  const tokenAuditSummary = useMemo(() => {
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+    let totalCostUsd = 0;
+    let boardCalls = 0;
+    let agendaCalls = 0;
+
+    for (const log of aiUsageLogs) {
+      if (log.status !== 'SUCCESS') continue;
+      promptTokens += Number(log.prompt_tokens || 0);
+      completionTokens += Number(log.completion_tokens || 0);
+      totalTokens += Number(log.total_tokens || 0);
+      totalCostUsd += Number(log.estimated_cost_usd || 0);
+      if (log.feature === 'BOARD_IMPORT') boardCalls += 1;
+      else agendaCalls += 1;
+    }
+
+    // Se ainda não houver logs salvos mas houver créditos debitados nas assinaturas, estima tokens proporcionalmente
+    if (totalTokens === 0 && totalAiCreditsUsed > 0) {
+      promptTokens = totalAiCreditsUsed * 1250;
+      completionTokens = totalAiCreditsUsed * 380;
+      totalTokens = promptTokens + completionTokens;
+      totalCostUsd = (promptTokens * 0.15) / 1_000_000 + (completionTokens * 0.6) / 1_000_000;
+    }
+
+    const usdToBrlRate = 5.8;
+    const totalCostBrl = totalCostUsd * usdToBrlRate;
+
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      totalCostUsd,
+      totalCostBrl,
+      totalCostBrlFormatted: totalCostBrl.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }),
+      boardCalls,
+      agendaCalls
+    };
+  }, [aiUsageLogs, totalAiCreditsUsed]);
 
   const geminiSetting = useMemo(() => {
     return aiPlatformSettings.find((s) => s.key === 'gemini_api_key');
   }, [aiPlatformSettings]);
+
+  const asaasKeySetting = useMemo(() => {
+    return aiPlatformSettings.find((s) => s.key === 'asaas_api_key');
+  }, [aiPlatformSettings]);
+
+  const asaasWebhookSetting = useMemo(() => {
+    return aiPlatformSettings.find((s) => s.key === 'asaas_webhook_secret');
+  }, [aiPlatformSettings]);
+
+  const handleSaveAsaasVault = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSavingAsaasVault(true);
+      setAsaasVaultFeedback(null);
+
+      // 1. Salva sempre o ambiente selecionado (sandbox ou production)
+      await supabase.rpc('admin_set_platform_setting', {
+        p_key: 'asaas_environment',
+        p_value: asaasEnvInput,
+        p_description: `Ambiente Asaas (${asaasEnvInput.toUpperCase()})`
+      });
+
+      // 2. Se informou nova API Key do Asaas, criptografa com AES-256
+      if (asaasApiKeyInput.trim()) {
+        const { error: keyErr } = await supabase.rpc('admin_set_platform_setting', {
+          p_key: 'asaas_api_key',
+          p_value: asaasApiKeyInput.trim(),
+          p_description: `Chave de API Gateway Asaas (${asaasEnvInput.toUpperCase()})`
+        });
+        if (keyErr) throw keyErr;
+      }
+
+      // 3. Se informou Token de Webhook do Asaas, criptografa com AES-256
+      if (asaasWebhookSecretInput.trim()) {
+        const { error: whErr } = await supabase.rpc('admin_set_platform_setting', {
+          p_key: 'asaas_webhook_secret',
+          p_value: asaasWebhookSecretInput.trim(),
+          p_description: 'Token de Segurança do Webhook Asaas'
+        });
+        if (whErr) throw whErr;
+      }
+
+      setAsaasVaultFeedback({
+        type: 'success',
+        message: 'Credenciais do Gateway Asaas criptografadas com AES-256 e salvas no cofre!'
+      });
+      setAsaasApiKeyInput('');
+      setAsaasWebhookSecretInput('');
+      await loadAiPlatformSettings();
+      setTimeout(() => setAsaasVaultFeedback(null), 5000);
+    } catch (err: any) {
+      setAsaasVaultFeedback({
+        type: 'error',
+        message: err?.message || 'Falha ao salvar credenciais do Asaas no cofre.'
+      });
+    } finally {
+      setIsSavingAsaasVault(false);
+    }
+  };
 
   // -------------------------------------------------------------
   // Handlers para Credenciais de IA (Google Gemini 1.5 Flash)
@@ -2413,22 +2585,172 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* ========================================================== */}
-              {/* SEÇÃO 3: MONITOR DE CONSUMO GERAL                         */}
+              {/* SEÇÃO 0.1: COFRE DE CREDENCIAIS DO GATEWAY ASAAS (AES-256) */}
               {/* ========================================================== */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-indigo-600" />
-                    <span>SEÇÃO 3: MONITOR DE CONSUMO GERAL</span>
-                  </h3>
-                  <span className="text-[11px] text-slate-500 font-medium">Mês Atual</span>
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 mt-0.5">
+                      <CreditCard className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-black text-slate-900">
+                          Gateway de Cobrança Asaas (Pix QR Code & Cartão Recorrente)
+                        </h3>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                          <Lock className="w-3 h-3 text-emerald-700" /> Cofre AES-256
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                        Configure sua chave de API do Asaas (<code className="font-mono text-[11px]">$aact_...</code>), o ambiente operacional e o Token de Webhook para ativação automática de planos e renovação mensal de créditos IA.
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href="https://www.asaas.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-bold hover:underline shrink-0 bg-emerald-50/70 border border-emerald-200 px-3 py-1.5 rounded-xl transition-colors"
+                  >
+                    <span>Painel Asaas</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Total de Créditos Consumidos */}
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-indigo-200 transition-colors">
+                <form onSubmit={handleSaveAsaasVault} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-800">Status da Chave Asaas:</span>
+                      {asaasKeySetting ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-300 px-2.5 py-0.5 rounded-lg">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Configurada:</span>
+                          <code className="font-mono font-black text-emerald-900 bg-white/70 px-1.5 py-0.5 rounded">
+                            {asaasKeySetting.key_fingerprint}
+                          </code>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2.5 py-0.5 rounded-lg">
+                          Modo Simulação / Sandbox Local
+                        </span>
+                      )}
+
+                      {asaasWebhookSetting && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg">
+                          Webhook Token: {asaasWebhookSetting.key_fingerprint}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Ambiente Asaas
+                      </label>
+                      <select
+                        value={asaasEnvInput}
+                        onChange={(e) => setAsaasEnvInput(e.target.value as 'sandbox' | 'production')}
+                        className="w-full px-3 py-2.5 text-xs font-bold bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 cursor-pointer"
+                      >
+                        <option value="sandbox">🧪 Sandbox (Homologação)</option>
+                        <option value="production">🚀 Produção (Cobrança Real)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Chave de API Asaas ($aact_...)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showAsaasKey ? 'text' : 'password'}
+                          value={asaasApiKeyInput}
+                          onChange={(e) => setAsaasApiKeyInput(e.target.value)}
+                          placeholder={asaasKeySetting ? 'Digite para substituir a chave atual...' : 'Cole sua chave $aact_...'}
+                          className="w-full pl-3 pr-9 py-2.5 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAsaasKey(!showAsaasKey)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          {showAsaasKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Webhook Secret Token (Opcional)
+                      </label>
+                      <input
+                        type="password"
+                        value={asaasWebhookSecretInput}
+                        onChange={(e) => setAsaasWebhookSecretInput(e.target.value)}
+                        placeholder="Token do header asaas-access-token"
+                        className="w-full px-3 py-2.5 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isSavingAsaasVault}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      {isSavingAsaasVault ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Salvando no Cofre...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Salvar Credenciais Asaas</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {asaasVaultFeedback && (
+                    <div
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-2 ${
+                        asaasVaultFeedback.type === 'success'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-red-50 text-red-800 border-red-200'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>{asaasVaultFeedback.message}</span>
+                    </div>
+                  )}
+                </form>
+              </div>
+
+              {/* ========================================================== */}
+              {/* SEÇÃO 3: AUDITORIA DE TOKENS REAIS, CUSTOS E EXTRATO       */}
+              {/* ========================================================== */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-indigo-600" />
+                    <span>SEÇÃO 3: AUDITORIA DE TOKENS REAIS (GOOGLE GEMINI) & CUSTOS POR CONTA</span>
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-semibold">
+                    Tarifação oficial Gemini Flash: Input US$ 0,15/1M • Output US$ 0,60/1M (Câmbio R$ 5,80)
+                  </span>
+                </div>
+
+                {/* 4 Cards Executivos de Telemetria Real */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Card 1: Créditos Debitados */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
                     <div className="flex items-center justify-between text-slate-500 mb-2">
-                      <span className="text-xs font-bold">Total de Créditos Consumidos</span>
+                      <span className="text-xs font-bold">Total de Créditos Usados</span>
                       <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                         <Zap className="w-4 h-4" />
                       </div>
@@ -2438,49 +2760,230 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span className="text-xs font-semibold text-slate-500">créditos</span>
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Soma de <code className="text-indigo-600 font-mono text-[10px]">ai_credits_used</code> em subscriptions
+                      Soma acumulada nas assinaturas ativas
                     </p>
                   </div>
 
-                  {/* Estimativa de Custo de Tokens em R$ */}
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-emerald-200 transition-colors">
-                    <div className="flex items-center justify-between text-slate-500 mb-2">
-                      <span className="text-xs font-bold">Estimativa de Custo de Tokens</span>
+                  {/* Card 2: Total de Tokens Reais Processados */}
+                  <div className="bg-white p-5 rounded-2xl border border-indigo-200/80 shadow-xs">
+                    <div className="flex items-center justify-between text-indigo-700 mb-2">
+                      <span className="text-xs font-bold">Tokens Reais Processados</span>
+                      <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <Cpu className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tight">
+                      {tokenAuditSummary.totalTokens.toLocaleString('pt-BR')}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      In: <strong>{tokenAuditSummary.promptTokens.toLocaleString('pt-BR')}</strong> • Out:{' '}
+                      <strong>{tokenAuditSummary.completionTokens.toLocaleString('pt-BR')}</strong>
+                    </p>
+                  </div>
+
+                  {/* Card 3: Custo Real Google Cloud (US$ e R$) */}
+                  <div className="bg-white p-5 rounded-2xl border border-emerald-200/80 shadow-xs">
+                    <div className="flex items-center justify-between text-emerald-700 mb-2">
+                      <span className="text-xs font-bold">Custo Real Google Cloud</span>
                       <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                         <CreditCard className="w-4 h-4" />
                       </div>
                     </div>
                     <div className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight">
-                      {estimatedAiCostBrl}
+                      {tokenAuditSummary.totalCostBrlFormatted}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Estimativa calculada: Total de créditos × <strong className="text-slate-700">R$ 0,02</strong>
+                      Equivale a <strong>US$ {tokenAuditSummary.totalCostUsd.toFixed(4)}</strong> no ciclo
                     </p>
                   </div>
 
-                  {/* Status Global do Kill-Switch */}
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-indigo-200 transition-colors">
-                    <div className="flex items-center justify-between text-slate-500 mb-2">
-                      <span className="text-xs font-bold">Status do Assistente</span>
-                      <div
-                        className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                          platformSettings.ai_enabled
-                            ? 'bg-indigo-50 text-indigo-600'
-                            : 'bg-red-50 text-red-600'
-                        }`}
-                      >
+                  {/* Card 4: Divisão por Funcionalidade (Mural vs Agenda) */}
+                  <div className="bg-white p-5 rounded-2xl border border-sky-200/80 shadow-xs">
+                    <div className="flex items-center justify-between text-sky-700 mb-2">
+                      <span className="text-xs font-bold">Uso por Funcionalidade</span>
+                      <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
                         <Sparkles className="w-4 h-4" />
                       </div>
                     </div>
-                    <div className="text-base sm:text-lg font-black text-slate-900">
-                      {platformSettings.ai_enabled ? 'Disponível para Famílias' : 'Pausa Global Ativada'}
+                    <div className="text-lg font-black text-slate-900">
+                      📄 {tokenAuditSummary.boardCalls} Mural • 📅 {tokenAuditSummary.agendaCalls} Agenda
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      {platformSettings.ai_enabled
-                        ? 'Execuções de IA operando normalmente nos planos com acesso.'
-                        : 'Chamadas bloqueadas preventivamente pelo kill-switch.'}
+                      Status: {platformSettings.ai_enabled ? '🟢 IA Operando Normalmente' : '🔴 Kill-Switch Ativo'}
                     </p>
                   </div>
+                </div>
+
+                {/* Tabela 1: Auditoria de Tokens e Custos por Conta (Família) */}
+                <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">
+                        📊 Consumo de Tokens e Créditos por Conta (Família)
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Ranking de consumo real por tenant sem expor o conteúdo privado dos documentos (100% LGPD Guard).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                          <th className="py-2.5 px-3">Família / Conta</th>
+                          <th className="py-2.5 px-3">Plano</th>
+                          <th className="py-2.5 px-3">Créditos (Ciclo)</th>
+                          <th className="py-2.5 px-3">Importações Mural</th>
+                          <th className="py-2.5 px-3">Tokens Reais (In + Out)</th>
+                          <th className="py-2.5 px-3 text-right">Custo Real (R$)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {[...tenants]
+                          .sort((a, b) => (b.total_tokens_used || b.ai_credits_used || 0) - (a.total_tokens_used || a.ai_credits_used || 0))
+                          .map((t) => {
+                            const used = t.ai_credits_used || 0;
+                            const limit = t.ai_credits_limit || 60;
+                            const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+                            const famTokens = t.total_tokens_used || used * 1500;
+                            const famCostBrl = ((t.estimated_cost_usd || (famTokens * 0.0000003)) * 5.8).toLocaleString('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL',
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 3
+                            });
+
+                            return (
+                              <tr key={t.family_id} className="hover:bg-slate-50/80">
+                                <td className="py-3 px-3 font-bold text-slate-900">
+                                  <div>{t.family_name}</div>
+                                  <div className="text-[10px] text-slate-400 font-mono">{t.family_id.slice(0, 12)}</div>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                    {t.plan_name}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${
+                                          pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                                        }`}
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <span className="font-bold text-slate-800">
+                                      {used}/{limit}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 font-semibold text-slate-700">
+                                  📄 {t.pdf_imports_count || 0} importação(ões)
+                                </td>
+                                <td className="py-3 px-3 font-mono text-slate-700">
+                                  {famTokens.toLocaleString('pt-BR')} tks
+                                </td>
+                                <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
+                                  {famCostBrl}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Tabela 2: Extrato de Auditoria em Tempo Real (ai_usage_logs) */}
+                <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">
+                        ⚡ Extrato de Requisições de IA em Tempo Real (Últimas Chamadas)
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Auditoria individual de cada chamada ao Google Gemini (<code className="font-mono text-[11px]">usageMetadata</code>).
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                      {aiUsageLogs.length} registro(s) carregado(s)
+                    </span>
+                  </div>
+
+                  {aiUsageLogs.length === 0 ? (
+                    <div className="p-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-500">
+                      Nenhuma chamada registrada na tabela <code className="font-mono">ai_usage_logs</code> ainda. Assim que uma família importar um PDF no Mural ou usar a Captura com IA, os tokens exatos aparecerão aqui.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-80">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                            <th className="py-2 px-2.5">Data / Hora</th>
+                            <th className="py-2 px-2.5">Família</th>
+                            <th className="py-2 px-2.5">Recurso</th>
+                            <th className="py-2 px-2.5">Mídia</th>
+                            <th className="py-2 px-2.5">Modelo</th>
+                            <th className="py-2 px-2.5">Tokens (In / Out / Total)</th>
+                            <th className="py-2 px-2.5">Créd.</th>
+                            <th className="py-2 px-2.5">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-[11px]">
+                          {aiUsageLogs.slice(0, 50).map((log) => (
+                            <tr key={log.id} className="hover:bg-slate-50">
+                              <td className="py-2 px-2.5 font-mono text-slate-500 whitespace-nowrap">
+                                {new Date(log.created_at).toLocaleString('pt-BR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </td>
+                              <td className="py-2 px-2.5 font-bold text-slate-800">
+                                {log.family_name || log.family_id.slice(0, 8)}
+                              </td>
+                              <td className="py-2 px-2.5">
+                                {log.feature === 'BOARD_IMPORT' ? (
+                                  <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 font-bold border border-sky-200">
+                                    📌 Mural ({log.items_generated} cards)
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 font-bold border border-amber-200">
+                                    📅 Agenda IA
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2.5 font-bold text-slate-700">{log.modality}</td>
+                              <td className="py-2 px-2.5 font-mono text-[10px] text-slate-500">{log.model_name}</td>
+                              <td className="py-2 px-2.5 font-mono text-slate-700">
+                                {log.prompt_tokens} / {log.completion_tokens} / <strong>{log.total_tokens}</strong>
+                              </td>
+                              <td className="py-2 px-2.5 font-extrabold text-indigo-700">
+                                -{log.credits_charged}
+                              </td>
+                              <td className="py-2 px-2.5">
+                                <span
+                                  className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                                    log.status === 'SUCCESS'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : log.status === 'BLOCKED_QUOTA'
+                                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  }`}
+                                >
+                                  {log.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
 

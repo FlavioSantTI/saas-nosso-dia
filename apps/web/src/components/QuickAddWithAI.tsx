@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { FamilyMember } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { AiQuotaCheckResult, FamilyMember } from '../types';
 import {
   extractRoutineWithGemini,
   getGeminiApiKey,
+  verifyAiQuotaBeforeCall,
   ExtractedRoutineData
 } from '../lib/gemini';
 import {
@@ -20,7 +21,8 @@ import {
   FileText,
   X,
   AlertCircle,
-  Loader2
+  Loader2,
+  Zap
 } from 'lucide-react';
 
 interface QuickAddProps {
@@ -36,11 +38,15 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   isOpen,
   onClose,
   members,
+  family,
+  onOpenUpgrade,
   onConfirmAdd
 }) => {
   const [inputText, setInputText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [usedVoice, setUsedVoice] = useState(false);
+  const [quotaInfo, setQuotaInfo] = useState<AiQuotaCheckResult | null>(null);
 
   // Anexo: foto do bilhete, PDF, DOC, DOCX, TXT ou MD
   const [attachment, setAttachment] = useState<PreparedAttachment | null>(null);
@@ -51,6 +57,16 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
   // Ditado por Voz (Web Speech API)
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const famId = family?.id || members[0]?.family_id;
+    if (famId) {
+      verifyAiQuotaBeforeCall(famId, 'AGENDA_QUICK_ADD', 'TEXT')
+        .then((res) => setQuotaInfo(res))
+        .catch(() => {});
+    }
+  }, [isOpen, family?.id, members]);
 
   if (!isOpen) return null;
 
@@ -83,6 +99,7 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
 
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
+        setUsedVoice(true);
         setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
       };
 
@@ -155,9 +172,14 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
         attachment?.mimeType ?? null,
         members,
         attachment?.text ?? null,
-        attachment?.fileName ?? null
+        attachment?.fileName ?? null,
+        {
+          familyId: family?.id || members[0]?.family_id || null,
+          modalityOverride: usedVoice && !attachment ? 'AUDIO' : undefined
+        }
       );
       setInputText('');
+      setUsedVoice(false);
       setAttachment(null);
       onConfirmAdd(data);
       onClose();
@@ -168,6 +190,10 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
       setIsParsing(false);
     }
   };
+
+  const creditsLimit = quotaInfo?.credits_limit ?? family?.ai_credits_limit ?? 60;
+  const creditsUsed = quotaInfo?.credits_used ?? family?.ai_credits_used ?? 0;
+  const creditsRemaining = Math.max(0, creditsLimit - creditsUsed);
 
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-fade-in">
@@ -184,14 +210,28 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 font-bold text-lg p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <div
+              title={`Saldo de créditos IA do plano (${creditsUsed} usados de ${creditsLimit})`}
+              className={`px-2.5 py-1 rounded-xl border text-[11px] font-extrabold flex items-center gap-1 ${
+                creditsRemaining <= 3
+                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                  : 'bg-sky-50 text-sky-800 border-sky-200'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 fill-current" />
+              <span>{creditsRemaining}/{creditsLimit} créd.</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fechar"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-slate-700 font-bold text-lg p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <label htmlFor="quick-add-ai-input" className="block text-xs text-slate-600 mb-3 leading-relaxed">
@@ -307,9 +347,26 @@ export const QuickAddWithAI: React.FC<QuickAddProps> = ({
         </div>
 
         {errorMessage && (
-          <div className="mt-3 p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-            <span>{errorMessage}</span>
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+              <span>{errorMessage}</span>
+            </div>
+            {onOpenUpgrade &&
+              (errorMessage.toLowerCase().includes('upgrade') ||
+                errorMessage.toLowerCase().includes('crédito') ||
+                errorMessage.toLowerCase().includes('limite')) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenUpgrade();
+                  }}
+                  className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  🚀 Fazer Upgrade de Plano Agora
+                </button>
+              )}
           </div>
         )}
 

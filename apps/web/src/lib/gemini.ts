@@ -1,6 +1,382 @@
-import { FamilyMember } from '../types';
+import {
+  AiModality,
+  AiQuotaCheckResult,
+  AiUsageFeature,
+  AiUsageLogItem,
+  FamilyMember
+} from '../types';
 import { supabase } from './supabase';
 import { getLocalDateString } from './dateUtils';
+
+const LOCAL_AI_LOGS_STORAGE_KEY = 'nosso_dia_ai_usage_logs_v3';
+
+export const AI_MODALITY_WEIGHTS: Record<AiModality, number> = {
+  TEXT: 1,
+  AUDIO: 2,
+  IMAGE: 3,
+  PDF: 5,
+  DOCX: 5
+};
+
+export function getCreditWeightForModality(modality: AiModality): number {
+  return AI_MODALITY_WEIGHTS[modality] ?? 1;
+}
+
+/**
+ * Calcula o custo real estimado em USD (Google Cloud Gemini 2.5/2.0 Flash):
+ * - Input: US$ 0.15 por 1 milhão de tokens
+ * - Output: US$ 0.60 por 1 milhão de tokens
+ */
+export function calculateGeminiCostUsd(promptTokens: number, completionTokens: number): number {
+  const inputCost = (Math.max(0, promptTokens) * 0.15) / 1_000_000;
+  const outputCost = (Math.max(0, completionTokens) * 0.60) / 1_000_000;
+  return Number((inputCost + outputCost).toFixed(6));
+}
+
+function readLocalAiLogs(): AiUsageLogItem[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_AI_LOGS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendLocalAiLog(entry: AiUsageLogItem): void {
+  try {
+    const current = readLocalAiLogs();
+    const updated = [entry, ...current].slice(0, 250);
+    localStorage.setItem(LOCAL_AI_LOGS_STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+/**
+ * Verifica se a família possui saldo de créditos e permissão no plano atual
+ * antes de disparar a requisição para a API do Google Gemini.
+ * Inclui a regra de Degustação (Trial): 1 importação gratuita de PDF/Foto no Mural.
+ */
+export async function verifyAiQuotaBeforeCall(
+  familyId: string | undefined | null,
+  feature: AiUsageFeature,
+  modality: AiModality
+): Promise<AiQuotaCheckResult> {
+  const requiredCredits = getCreditWeightForModality(modality);
+
+  if (!familyId) {
+    return {
+      allowed: true,
+      required_credits: requiredCredits,
+      credits_used: 0,
+      credits_limit: 160,
+      credits_remaining: 160,
+      plan_slug: 'pro-ia',
+      plan_name: 'Família Pro IA'
+    };
+  }
+
+  // 1. Tenta via RPC oficial no banco (atômico e seguro)
+  try {
+    const { data, error } = await supabase.rpc('verify_ai_quota_before_call', {
+      p_family_id: familyId,
+      p_feature: feature,
+      p_modality: modality
+    });
+
+    if (!error && data && typeof data === 'object') {
+      return data as AiQuotaCheckResult;
+    }
+  } catch {
+    // Fallback abaixo caso a migration ainda não tenha sido rodada
+  }
+
+  // 2. Fallback em memória / consulta direta às tabelas subscriptions + plans
+  try {
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select(`
+        id,
+        status,
+        ai_credits_used,
+        plans (
+          slug,
+          name,
+          monthly_ai_credits,
+          allowed_ai_modalities
+        )
+      `)
+      .eq('family_id', familyId)
+      .maybeSingle();
+
+    const planObj = (sub?.plans as any) || null;
+    const planSlug: string = planObj?.slug || 'trial';
+    const planName: string = planObj?.name || 'Degustação';
+    const creditsUsed: number = Number(sub?.ai_credits_used || 0);
+    const creditsLimit: number = Number(planObj?.monthly_ai_credits || 15);
+    const subStatus: string = sub?.status || 'TRIALING';
+
+    if (subStatus === 'CANCELED' || subStatus === 'EXPIRED') {
+      return {
+        allowed: false,
+        reason: 'SUBSCRIPTION_INACTIVE',
+        message: 'Sua assinatura está inativa ou expirada. Renove seu plano para usar o Assistente IA.',
+        required_credits: requiredCredits,
+        credits_used: creditsUsed,
+        credits_limit: creditsLimit,
+        plan_slug: planSlug,
+        plan_name: planName
+      };
+    }
+
+    // Conta quantas importações do Mural já foram feitas no mês
+    const startOfMonthIso = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+    let boardImportsCount = 0;
+
+    const { count: dbBoardCount, error: countErr } = await supabase
+      .from('ai_usage_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId)
+      .eq('feature', 'BOARD_IMPORT')
+      .eq('status', 'SUCCESS')
+      .gte('created_at', startOfMonthIso);
+
+    if (!countErr && typeof dbBoardCount === 'number') {
+      boardImportsCount = dbBoardCount;
+    } else {
+      const localLogs = readLocalAiLogs();
+      boardImportsCount = localLogs.filter(
+        (l) =>
+          l.family_id === familyId &&
+          l.feature === 'BOARD_IMPORT' &&
+          l.status === 'SUCCESS'
+      ).length;
+    }
+
+    if (planSlug === 'trial' && feature === 'BOARD_IMPORT' && boardImportsCount >= 1) {
+      return {
+        allowed: false,
+        reason: 'TRIAL_BOARD_IMPORT_LIMIT',
+        message:
+          'Você já utilizou sua 1 importação gratuita de Calendário/Provas da Degustação! Faça upgrade para o plano Família Essencial ou Pro IA para continuar importando PDFs e fotos no Mural.',
+        required_credits: requiredCredits,
+        credits_used: creditsUsed,
+        credits_limit: creditsLimit,
+        board_imports_used: boardImportsCount,
+        board_imports_limit: 1,
+        plan_slug: planSlug,
+        plan_name: planName
+      };
+    }
+
+    if (planSlug === 'essencial' && feature === 'BOARD_IMPORT' && boardImportsCount >= 2) {
+      return {
+        allowed: false,
+        reason: 'ESSENTIAL_BOARD_IMPORT_LIMIT',
+        message:
+          'Você atingiu o limite de 2 importações de documentos no Mural do plano Família Essencial neste mês. Faça upgrade para o Família Pro IA para importações ilimitadas!',
+        required_credits: requiredCredits,
+        credits_used: creditsUsed,
+        credits_limit: creditsLimit,
+        board_imports_used: boardImportsCount,
+        board_imports_limit: 2,
+        plan_slug: planSlug,
+        plan_name: planName
+      };
+    }
+
+    if (creditsUsed + requiredCredits > creditsLimit) {
+      return {
+        allowed: false,
+        reason: 'INSUFFICIENT_CREDITS',
+        message: `Saldo de créditos IA insuficiente (${creditsUsed}/${creditsLimit} usados; esta ação requer ${requiredCredits} crédito(s)). Faça upgrade de plano para liberar mais créditos imediatamente.`,
+        required_credits: requiredCredits,
+        credits_used: creditsUsed,
+        credits_limit: creditsLimit,
+        plan_slug: planSlug,
+        plan_name: planName
+      };
+    }
+
+    return {
+      allowed: true,
+      required_credits: requiredCredits,
+      credits_used: creditsUsed,
+      credits_limit: creditsLimit,
+      credits_remaining: Math.max(0, creditsLimit - creditsUsed),
+      board_imports_used: boardImportsCount,
+      board_imports_limit: planSlug === 'trial' ? 1 : planSlug === 'essencial' ? 2 : null,
+      plan_slug: planSlug,
+      plan_name: planName
+    };
+  } catch {
+    return {
+      allowed: true,
+      required_credits: requiredCredits,
+      credits_used: 0,
+      credits_limit: 160
+    };
+  }
+}
+
+/**
+ * Registra o consumo real de tokens (prompt, completion, total), custo estimado em USD
+ * e debita os créditos da assinatura da família.
+ */
+export async function recordAiUsageLog(params: {
+  familyId?: string | null;
+  memberId?: string | null;
+  feature: AiUsageFeature;
+  modality: AiModality;
+  modelName: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  creditsCharged: number;
+  estimatedCostUsd: number;
+  itemsGenerated?: number;
+  status?: 'SUCCESS' | 'BLOCKED_QUOTA' | 'ERROR';
+  errorMessage?: string | null;
+}): Promise<void> {
+  const familyId = params.familyId || null;
+  const status = params.status || 'SUCCESS';
+  const localEntry: AiUsageLogItem = {
+    id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    family_id: familyId || 'unknown',
+    member_id: params.memberId || null,
+    feature: params.feature,
+    modality: params.modality,
+    model_name: params.modelName,
+    prompt_tokens: params.promptTokens,
+    completion_tokens: params.completionTokens,
+    total_tokens: params.totalTokens,
+    credits_charged: status === 'SUCCESS' ? params.creditsCharged : 0,
+    estimated_cost_usd: params.estimatedCostUsd,
+    items_generated: params.itemsGenerated ?? 1,
+    status,
+    error_message: params.errorMessage || null,
+    created_at: new Date().toISOString()
+  };
+
+  // Sempre salva cópia local para resiliência imediata
+  appendLocalAiLog(localEntry);
+
+  if (!familyId) return;
+
+  try {
+    const { error } = await supabase.rpc('record_ai_usage', {
+      p_family_id: familyId,
+      p_member_id: params.memberId || null,
+      p_feature: params.feature,
+      p_modality: params.modality,
+      p_model_name: params.modelName,
+      p_prompt_tokens: params.promptTokens,
+      p_completion_tokens: params.completionTokens,
+      p_total_tokens: params.totalTokens,
+      p_credits_charged: status === 'SUCCESS' ? params.creditsCharged : 0,
+      p_estimated_cost_usd: params.estimatedCostUsd,
+      p_items_generated: params.itemsGenerated ?? 1,
+      p_status: status,
+      p_error_message: params.errorMessage || null
+    });
+
+    if (!error) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nosso-dia-ai-usage-updated'));
+      }
+      return;
+    }
+  } catch {
+    // Fallback se a RPC ainda não existir no banco
+  }
+
+  // Fallback direto nas tabelas se a RPC não estiver criada
+  try {
+    await supabase.from('ai_usage_logs').insert({
+      family_id: familyId,
+      member_id: params.memberId || null,
+      feature: params.feature,
+      modality: params.modality,
+      model_name: params.modelName,
+      prompt_tokens: params.promptTokens,
+      completion_tokens: params.completionTokens,
+      total_tokens: params.totalTokens,
+      credits_charged: status === 'SUCCESS' ? params.creditsCharged : 0,
+      estimated_cost_usd: params.estimatedCostUsd,
+      items_generated: params.itemsGenerated ?? 1,
+      status,
+      error_message: params.errorMessage || null
+    });
+
+    if (status === 'SUCCESS' && params.creditsCharged > 0) {
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('id, ai_credits_used')
+        .eq('family_id', familyId)
+        .maybeSingle();
+
+      if (sub?.id) {
+        await supabase
+          .from('subscriptions')
+          .update({
+            ai_credits_used: Number(sub.ai_credits_used || 0) + params.creditsCharged,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', sub.id);
+      }
+    }
+  } catch {
+    // Silencioso se tabela não existir ainda
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nosso-dia-ai-usage-updated'));
+  }
+}
+
+/**
+ * Busca o histórico de auditoria de chamadas de IA para o Painel Super-Admin.
+ */
+export async function fetchAiUsageLogsForAdmin(limit = 150): Promise<AiUsageLogItem[]> {
+  try {
+    const { data, error } = await supabase
+      .from('ai_usage_logs')
+      .select(`
+        *,
+        families ( name )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return data.map((row: any) => ({
+        id: row.id,
+        family_id: row.family_id,
+        family_name: row.families?.name || 'Família',
+        member_id: row.member_id,
+        feature: row.feature,
+        modality: row.modality,
+        model_name: row.model_name,
+        prompt_tokens: Number(row.prompt_tokens || 0),
+        completion_tokens: Number(row.completion_tokens || 0),
+        total_tokens: Number(row.total_tokens || 0),
+        credits_charged: Number(row.credits_charged || 0),
+        estimated_cost_usd: Number(row.estimated_cost_usd || 0),
+        items_generated: Number(row.items_generated || 0),
+        status: row.status || 'SUCCESS',
+        error_message: row.error_message,
+        created_at: row.created_at
+      }));
+    }
+  } catch {
+    // Fallback para logs locais
+  }
+
+  return readLocalAiLogs().slice(0, limit);
+}
+
 
 export function getFallbackGeminiApiKey(): string {
   return import.meta.env.VITE_GEMINI_API_KEY || '';
@@ -60,8 +436,50 @@ export async function extractRoutineWithGemini(
   imageMimeType: string | null,
   members: FamilyMember[],
   documentText?: string | null,
-  documentName?: string | null
+  documentName?: string | null,
+  context?: {
+    familyId?: string | null;
+    memberId?: string | null;
+    modalityOverride?: AiModality;
+  }
 ): Promise<ExtractedRoutineData> {
+  const familyId = context?.familyId || members[0]?.family_id || null;
+  const memberId = context?.memberId || members.find((m) => m.role === 'ADMIN')?.id || members[0]?.id || null;
+
+  // Determina a modalidade para tarifação justa de créditos
+  let modality: AiModality = context?.modalityOverride || 'TEXT';
+  if (!context?.modalityOverride) {
+    if (imageMimeType === 'application/pdf') {
+      modality = 'PDF';
+    } else if (documentText && documentName && /\.(docx|doc)$/i.test(documentName)) {
+      modality = 'DOCX';
+    } else if (imageBase64 && imageMimeType?.startsWith('image/')) {
+      modality = 'IMAGE';
+    }
+  }
+  const creditsCharged = getCreditWeightForModality(modality);
+
+  // 1. Verifica saldo de créditos da família antes de chamar a API
+  const quotaCheck = await verifyAiQuotaBeforeCall(familyId, 'AGENDA_QUICK_ADD', modality);
+  if (!quotaCheck.allowed) {
+    await recordAiUsageLog({
+      familyId,
+      memberId,
+      feature: 'AGENDA_QUICK_ADD',
+      modality,
+      modelName: 'gemini-2.5-flash',
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      creditsCharged: 0,
+      estimatedCostUsd: 0,
+      itemsGenerated: 0,
+      status: 'BLOCKED_QUOTA',
+      errorMessage: quotaCheck.message || quotaCheck.reason
+    });
+    throw new Error(quotaCheck.message || 'Limite de créditos IA atingido no seu plano atual.');
+  }
+
   const apiKey = await getGeminiApiKey();
 
   if (!apiKey) {
@@ -174,6 +592,7 @@ Formato OBRIGATÓRIO de saída (JSON puro):
   ];
 
   let result: any = null;
+  let usedModel = candidateModels[0];
   let lastErrorMessage = '';
 
   for (const model of candidateModels) {
@@ -187,6 +606,7 @@ Formato OBRIGATÓRIO de saída (JSON puro):
 
       if (response.ok) {
         result = await response.json();
+        usedModel = model;
         break; // Modelo respondeu com sucesso!
       }
 
@@ -211,12 +631,50 @@ Formato OBRIGATÓRIO de saída (JSON puro):
   const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
   const cleanJson = rawText.replace(/```json\n?|```/g, '').trim();
 
+  // Captura telemetria oficial de tokens do Google Gemini (usageMetadata)
+  const usageMeta = result?.usageMetadata || {};
+  const promptTokens = Number(usageMeta.promptTokenCount) || Math.ceil(fullText.length / 4);
+  const completionTokens = Number(usageMeta.candidatesTokenCount) || Math.ceil(rawText.length / 4);
+  const totalTokens = Number(usageMeta.totalTokenCount) || promptTokens + completionTokens;
+  const estimatedCostUsd = calculateGeminiCostUsd(promptTokens, completionTokens);
+
   let parsed: RawGeminiOutput;
   try {
     parsed = JSON.parse(cleanJson);
   } catch {
+    await recordAiUsageLog({
+      familyId,
+      memberId,
+      feature: 'AGENDA_QUICK_ADD',
+      modality,
+      modelName: usedModel,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      creditsCharged: 0,
+      estimatedCostUsd,
+      itemsGenerated: 0,
+      status: 'ERROR',
+      errorMessage: 'JSON inválido na resposta do Gemini'
+    });
     throw new Error('A IA não conseguiu estruturar a resposta em JSON válido.');
   }
+
+  // Registra consumo auditado e debita créditos da família
+  await recordAiUsageLog({
+    familyId,
+    memberId,
+    feature: 'AGENDA_QUICK_ADD',
+    modality,
+    modelName: usedModel,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    creditsCharged,
+    estimatedCostUsd,
+    itemsGenerated: 1,
+    status: 'SUCCESS'
+  });
 
   // Identifica participantes
   const identifiedParticipants: FamilyMember[] = [];
@@ -324,8 +782,46 @@ export async function extractBoardItemsWithGemini(
     text?: string;
     extractedText?: string;
     fileName?: string;
-  } | null
+  } | null,
+  context?: {
+    familyId?: string | null;
+    memberId?: string | null;
+  }
 ): Promise<ExtractedBoardItemDraft[]> {
+  const familyId = context?.familyId || null;
+  const memberId = context?.memberId || null;
+
+  let modality: AiModality = 'TEXT';
+  if (attachment?.kind === 'pdf' || attachment?.mimeType === 'application/pdf') {
+    modality = 'PDF';
+  } else if (attachment?.kind === 'docx' || attachment?.kind === 'doc') {
+    modality = 'DOCX';
+  } else if (attachment?.kind === 'image' || attachment?.mimeType?.startsWith('image/')) {
+    modality = 'IMAGE';
+  }
+  const creditsCharged = getCreditWeightForModality(modality);
+
+  // 1. Verifica cota e limite de importação do Mural (incluindo 1 importação gratuita na Degustação)
+  const quotaCheck = await verifyAiQuotaBeforeCall(familyId, 'BOARD_IMPORT', modality);
+  if (!quotaCheck.allowed) {
+    await recordAiUsageLog({
+      familyId,
+      memberId,
+      feature: 'BOARD_IMPORT',
+      modality,
+      modelName: 'gemini-2.5-flash',
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      creditsCharged: 0,
+      estimatedCostUsd: 0,
+      itemsGenerated: 0,
+      status: 'BLOCKED_QUOTA',
+      errorMessage: quotaCheck.message || quotaCheck.reason
+    });
+    throw new Error(quotaCheck.message || 'Limite de importação com IA atingido no seu plano.');
+  }
+
   const apiKey = await getGeminiApiKey();
   if (!apiKey) {
     throw new Error('Chave da API do Google Gemini não configurada. Configure no Painel Super-Admin.');
@@ -424,6 +920,7 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido com a propriedade "items" seguindo
   ];
 
   let result: any = null;
+  let usedModel = candidateModels[0];
   let lastErrorMessage = '';
 
   for (const model of candidateModels) {
@@ -437,6 +934,7 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido com a propriedade "items" seguindo
 
       if (response.ok) {
         result = await response.json();
+        usedModel = model;
         break;
       }
 
@@ -461,10 +959,32 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido com a propriedade "items" seguindo
   const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
   const cleanJson = rawText.replace(/```json\n?|```/g, '').trim();
 
+  // Captura telemetria oficial de tokens do Google Gemini (usageMetadata)
+  const usageMeta = result?.usageMetadata || {};
+  const promptTokens = Number(usageMeta.promptTokenCount) || Math.ceil(systemInstruction.length / 3);
+  const completionTokens = Number(usageMeta.candidatesTokenCount) || Math.ceil(rawText.length / 4);
+  const totalTokens = Number(usageMeta.totalTokenCount) || promptTokens + completionTokens;
+  const estimatedCostUsd = calculateGeminiCostUsd(promptTokens, completionTokens);
+
   let parsed: any;
   try {
     parsed = JSON.parse(cleanJson);
   } catch {
+    await recordAiUsageLog({
+      familyId,
+      memberId,
+      feature: 'BOARD_IMPORT',
+      modality,
+      modelName: usedModel,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      creditsCharged: 0,
+      estimatedCostUsd,
+      itemsGenerated: 0,
+      status: 'ERROR',
+      errorMessage: 'JSON inválido na extração do Mural'
+    });
     throw new Error('A IA não conseguiu estruturar os avisos do documento em JSON válido.');
   }
 
@@ -473,6 +993,22 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido com a propriedade "items" seguindo
     : Array.isArray(parsed?.items)
     ? parsed.items
     : [];
+
+  // Registra consumo auditado e debita créditos da família
+  await recordAiUsageLog({
+    familyId,
+    memberId,
+    feature: 'BOARD_IMPORT',
+    modality,
+    modelName: usedModel,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    creditsCharged,
+    estimatedCostUsd,
+    itemsGenerated: rawItems.length,
+    status: 'SUCCESS'
+  });
 
   const validTypes = new Set(['EXAM', 'ASSIGNMENT', 'SUPPLY', 'PERMISSION', 'NOTE']);
 

@@ -1,13 +1,71 @@
 import { Plan } from '../types';
+import { supabase } from './supabase';
 
 /**
- * Configurações do Gateway Asaas.
- * Suporta Sandbox (ambiente de teste) e Produção.
+ * Formata CPF (000.000.000-00) ou CNPJ (00.000.000/0000-00) enquanto o usuário digita.
  */
-const ASAAS_API_KEY = import.meta.env.VITE_ASAAS_API_KEY || '';
-const ASAAS_BASE_URL =
-  import.meta.env.VITE_ASAAS_API_URL ||
-  (import.meta.env.PROD ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3');
+export function formatCpfCnpjMask(raw: string): string {
+  const digits = (raw || '').replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 11) {
+    return digits
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+}
+
+/**
+ * Valida CPF (11 dígitos) ou CNPJ (14 dígitos).
+ */
+export function validateCpfCnpj(raw: string): boolean {
+  const digits = (raw || '').replace(/\D/g, '');
+  if (digits.length !== 11 && digits.length !== 14) return false;
+  if (/^(\d)\1+$/.test(digits)) return false;
+  return true;
+}
+
+/**
+ * Obtém a configuração do Asaas (API Key + Ambiente) descriptografada do Cofre AES-256
+ * ou das variáveis de ambiente de fallback.
+ */
+export async function getAsaasConfig(): Promise<{
+  apiKey: string;
+  environment: 'sandbox' | 'production';
+  baseUrl: string;
+}> {
+  let apiKey = import.meta.env.VITE_ASAAS_API_KEY || '';
+  let environment: 'sandbox' | 'production' = import.meta.env.PROD ? 'production' : 'sandbox';
+
+  try {
+    const [keyRes, envRes] = await Promise.all([
+      supabase.rpc('get_active_ai_key', { p_provider: 'asaas_api_key' }),
+      supabase.rpc('get_active_ai_key', { p_provider: 'asaas_environment' })
+    ]);
+
+    if (!keyRes.error && typeof keyRes.data === 'string' && keyRes.data.trim()) {
+      apiKey = keyRes.data.trim();
+    }
+    if (!envRes.error && typeof envRes.data === 'string' && envRes.data.trim()) {
+      const cleanEnv = envRes.data.trim().toLowerCase();
+      if (cleanEnv === 'production' || cleanEnv === 'sandbox') {
+        environment = cleanEnv;
+      }
+    }
+  } catch {
+    // Fallback para variáveis de ambiente
+  }
+
+  const baseUrl =
+    import.meta.env.VITE_ASAAS_API_URL ||
+    (environment === 'production' ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3');
+
+  return { apiKey, environment, baseUrl };
+}
 
 export interface AsaasCustomer {
   id: string;
@@ -27,6 +85,7 @@ export interface AsaasSubscriptionResponse {
   status: 'ACTIVE' | 'INACTIVE';
   paymentLink?: string;
   pixQrCode?: string;
+  pixQrCodeImage?: string;
 }
 
 export interface ParsedWebhookResult {
@@ -47,27 +106,30 @@ export async function createAsaasCustomer(
   email: string,
   cpfCnpj?: string
 ): Promise<AsaasCustomer> {
-  if (!ASAAS_API_KEY) {
-    console.info('[Asaas Mock/Sandbox] VITE_ASAAS_API_KEY não configurada. Simulando criação de cliente.');
+  const { apiKey, baseUrl } = await getAsaasConfig();
+  const cleanCpfCnpj = cpfCnpj ? cpfCnpj.replace(/\D/g, '') : undefined;
+
+  if (!apiKey) {
+    console.info('[Asaas Sandbox/Simulação] Chave Asaas não configurada no cofre. Simulando criação de cliente.');
     return {
       id: `cus_sim_${Date.now()}`,
       name,
       email,
-      cpfCnpj: cpfCnpj || '000.000.000-00',
+      cpfCnpj: cleanCpfCnpj || '00000000000',
     };
   }
 
   try {
-    const res = await fetch(`${ASAAS_BASE_URL}/customers`, {
+    const res = await fetch(`${baseUrl}/customers`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        access_token: ASAAS_API_KEY,
+        access_token: apiKey,
       },
       body: JSON.stringify({
         name,
         email,
-        cpfCnpj: cpfCnpj ? cpfCnpj.replace(/\D/g, '') : undefined,
+        cpfCnpj: cleanCpfCnpj,
       }),
     });
 
@@ -90,21 +152,63 @@ export async function createAsaasCustomer(
 }
 
 /**
- * Cria uma assinatura recorrente no Asaas (Pix ou Cartão de Crédito).
+ * Cria uma assinatura recorrente no Asaas (Pix ou Cartão de Crédito) e sincroniza
+ * imediatamente com a tabela `public.subscriptions` da família.
  */
 export async function createSubscription(
   customerId: string,
   plan: Plan,
-  paymentMethod: 'PIX' | 'CREDIT_CARD'
+  paymentMethod: 'PIX' | 'CREDIT_CARD',
+  options?: {
+    familyId?: string;
+    customerName?: string;
+    customerEmail?: string;
+    cpfCnpj?: string;
+  }
 ): Promise<AsaasSubscriptionResponse> {
   const valueInReais = plan.price_cents / 100;
   const cycle = plan.billing_interval === 'YEARLY' ? 'YEARLY' : 'MONTHLY';
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  if (!ASAAS_API_KEY) {
-    console.info('[Asaas Mock/Sandbox] Simulando criação de assinatura para o plano:', plan.name);
-    return {
-      id: `sub_sim_${Date.now()}`,
+  // 1. Tenta primeiro invocar a Supabase Edge Function `asaas-checkout` (evita CORS em produção)
+  try {
+    const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('asaas-checkout', {
+      body: {
+        familyId: options?.familyId,
+        customerId,
+        customerName: options?.customerName,
+        customerEmail: options?.customerEmail,
+        cpfCnpj: options?.cpfCnpj ? options.cpfCnpj.replace(/\D/g, '') : undefined,
+        planSlug: plan.slug,
+        planId: plan.id,
+        planName: plan.name,
+        priceCents: plan.price_cents,
+        billingInterval: plan.billing_interval,
+        billingType: paymentMethod
+      }
+    });
+
+    if (!edgeErr && edgeData && edgeData.id) {
+      return edgeData as AsaasSubscriptionResponse;
+    }
+  } catch {
+    // Segue para execução direta / sandbox caso a Edge Function não esteja publicada
+  }
+
+  const { apiKey, baseUrl } = await getAsaasConfig();
+
+  let subResponse: AsaasSubscriptionResponse;
+
+  if (!apiKey) {
+    console.info('[Asaas Sandbox/Simulação] Simulando criação de assinatura para o plano:', plan.name);
+    const mockId = `sub_sim_${Date.now()}`;
+    const mockPixCode =
+      paymentMethod === 'PIX'
+        ? `00020126580014br.gov.bcb.pix0136nossodia-${plan.slug}-${Date.now()}5204000053039865405${valueInReais.toFixed(2)}5802BR5913NOSSO DIA APP6009SAO PAULO62070503***6304ABCD`
+        : undefined;
+
+    subResponse = {
+      id: mockId,
       customer: customerId,
       value: valueInReais,
       nextDueDate: tomorrow,
@@ -112,47 +216,115 @@ export async function createSubscription(
       billingType: paymentMethod,
       status: 'ACTIVE',
       paymentLink: `https://sandbox.asaas.com/i/mock_${Date.now()}`,
-      pixQrCode: paymentMethod === 'PIX' ? '00020126580014br.gov.bcb.pix0136mock-nosso-dia-pix-qrcode' : undefined,
+      pixQrCode: mockPixCode,
     };
-  }
+  } else {
+    try {
+      const res = await fetch(`${baseUrl}/subscriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          access_token: apiKey,
+        },
+        body: JSON.stringify({
+          customer: customerId,
+          billingType: paymentMethod,
+          value: valueInReais,
+          nextDueDate: tomorrow,
+          cycle,
+          externalReference: options?.familyId || undefined,
+          description: `Assinatura Nosso Dia - ${plan.name} (${plan.billing_interval === 'YEARLY' ? 'Anual' : 'Mensal'})`,
+        }),
+      });
 
-  try {
-    const res = await fetch(`${ASAAS_BASE_URL}/subscriptions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        access_token: ASAAS_API_KEY,
-      },
-      body: JSON.stringify({
-        customer: customerId,
-        billingType: paymentMethod,
-        value: valueInReais,
-        nextDueDate: tomorrow,
-        cycle,
-        description: `Assinatura Nosso Dia - ${plan.name} (${plan.billing_interval === 'YEARLY' ? 'Anual' : 'Mensal'})`,
-      }),
-    });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData?.errors?.[0]?.description || `Erro ao gerar assinatura no Asaas (${res.status})`);
+      }
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.errors?.[0]?.description || `Erro ao gerar assinatura no Asaas (${res.status})`);
+      const data = await res.json();
+      let invoiceUrl = data.paymentLink || undefined;
+      let pixPayload: string | undefined;
+      let pixQrImage: string | undefined;
+
+      // Busca a 1ª cobrança gerada pela assinatura para extrair o link da fatura e o QR Code Pix
+      try {
+        const paymentsRes = await fetch(`${baseUrl}/subscriptions/${data.id}/payments`, {
+          headers: { access_token: apiKey }
+        });
+        if (paymentsRes.ok) {
+          const paymentsJson = await paymentsRes.json();
+          const firstPayment = paymentsJson?.data?.[0];
+          if (firstPayment) {
+            invoiceUrl = firstPayment.invoiceUrl || firstPayment.bankSlipUrl || invoiceUrl;
+            if (paymentMethod === 'PIX' && firstPayment.id) {
+              const pixRes = await fetch(`${baseUrl}/payments/${firstPayment.id}/pixQrCode`, {
+                headers: { access_token: apiKey }
+              });
+              if (pixRes.ok) {
+                const pixJson = await pixRes.json();
+                pixPayload = pixJson?.payload || undefined;
+                pixQrImage = pixJson?.encodedImage ? `data:image/png;base64,${pixJson.encodedImage}` : undefined;
+              }
+            }
+          }
+        }
+      } catch {
+        // Silencioso se não conseguir buscar o QR Code imediatamente
+      }
+
+      subResponse = {
+        id: data.id,
+        customer: data.customer,
+        value: data.value,
+        nextDueDate: data.nextDueDate,
+        cycle: data.cycle,
+        billingType: data.billingType,
+        status: 'ACTIVE',
+        paymentLink: invoiceUrl,
+        pixQrCode: pixPayload,
+        pixQrCodeImage: pixQrImage
+      };
+    } catch (err: any) {
+      console.error('[Asaas] Falha ao criar assinatura:', err);
+      throw err;
     }
-
-    const data = await res.json();
-    return {
-      id: data.id,
-      customer: data.customer,
-      value: data.value,
-      nextDueDate: data.nextDueDate,
-      cycle: data.cycle,
-      billingType: data.billingType,
-      status: 'ACTIVE',
-      paymentLink: data.paymentLink || undefined,
-    };
-  } catch (err: any) {
-    console.error('[Asaas] Falha ao criar assinatura:', err);
-    throw err;
   }
+
+  // Persiste os dados da cobrança Asaas na assinatura da família no Supabase
+  if (options?.familyId) {
+    try {
+      const { data: planRow } = await supabase
+        .from('plans')
+        .select('id')
+        .eq('slug', plan.slug)
+        .maybeSingle();
+
+      const updatePayload: Record<string, any> = {
+        asaas_customer_id: customerId,
+        asaas_subscription_id: subResponse.id,
+        billing_type: paymentMethod,
+        billing_cycle: cycle,
+        cpf_cnpj: options.cpfCnpj ? options.cpfCnpj.replace(/\D/g, '') : null,
+        last_invoice_url: subResponse.paymentLink || null,
+        last_pix_payload: subResponse.pixQrCode || null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (planRow?.id) {
+        updatePayload.plan_id = planRow.id;
+      }
+
+      await supabase
+        .from('subscriptions')
+        .update(updatePayload)
+        .eq('family_id', options.familyId);
+    } catch {
+      // Silencioso caso colunas opcionais ainda não tenham sido migradas
+    }
+  }
+
+  return subResponse;
 }
 
 /**

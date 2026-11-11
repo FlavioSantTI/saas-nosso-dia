@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
+  AiQuotaCheckResult,
   BoardItemType,
   FamilyBoardItem,
   FamilyMember
@@ -18,7 +19,8 @@ import {
 } from '../../lib/documentExtract';
 import {
   ExtractedBoardItemDraft,
-  extractBoardItemsWithGemini
+  extractBoardItemsWithGemini,
+  verifyAiQuotaBeforeCall
 } from '../../lib/gemini';
 import { MemberAvatar } from '../MemberAvatar';
 import { getMemberDisplayName } from '../../lib/formatters';
@@ -34,7 +36,8 @@ import {
   Check,
   Calendar,
   ListChecks,
-  Paperclip
+  Paperclip,
+  Zap
 } from 'lucide-react';
 
 interface BoardImportModalProps {
@@ -44,6 +47,7 @@ interface BoardImportModalProps {
   members: FamilyMember[];
   currentMember?: FamilyMember | null;
   existingItems: FamilyBoardItem[];
+  onOpenUpgrade?: () => void;
   onBatchSave: (inputs: CreateBoardItemInput[]) => Promise<void>;
 }
 
@@ -54,6 +58,7 @@ export const BoardImportModal: React.FC<BoardImportModalProps> = ({
   members,
   currentMember,
   existingItems,
+  onOpenUpgrade,
   onBatchSave
 }) => {
   const defaultChild = members.find((m) => m.role === 'CHILD') || members[0];
@@ -71,8 +76,16 @@ export const BoardImportModal: React.FC<BoardImportModalProps> = ({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<ExtractedBoardItemDraft[]>([]);
   const [isSavingBatch, setIsSavingBatch] = useState(false);
+  const [quotaInfo, setQuotaInfo] = useState<AiQuotaCheckResult | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !familyId) return;
+    verifyAiQuotaBeforeCall(familyId, 'BOARD_IMPORT', 'PDF')
+      .then((res) => setQuotaInfo(res))
+      .catch(() => {});
+  }, [isOpen, familyId]);
 
   if (!isOpen) return null;
 
@@ -109,7 +122,10 @@ export const BoardImportModal: React.FC<BoardImportModalProps> = ({
     setExtractError(null);
 
     try {
-      const results = await extractBoardItemsWithGemini(manualText, preparedDoc);
+      const results = await extractBoardItemsWithGemini(manualText, preparedDoc, {
+        familyId,
+        memberId: currentMember?.id || null
+      });
       if (results.length === 0) {
         setExtractError(
           'A IA não encontrou provas, trabalhos ou avisos estruturados neste documento. Tente complementar com instruções em texto.'
@@ -247,6 +263,41 @@ export const BoardImportModal: React.FC<BoardImportModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {step === 'upload' ? (
             <>
+              {/* Faixa de Saldo de Créditos & Regra de Degustação / Plano */}
+              {quotaInfo && (
+                <div
+                  className={`px-3.5 py-2.5 rounded-2xl border flex items-center justify-between gap-2 flex-wrap text-xs font-bold ${
+                    !quotaInfo.allowed
+                      ? 'bg-amber-50 border-amber-300 text-amber-900'
+                      : quotaInfo.plan_slug === 'trial'
+                      ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                      : 'bg-sky-50/80 border-sky-200 text-sky-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 shrink-0" />
+                    {quotaInfo.plan_slug === 'trial' ? (
+                      <span>
+                        🎁 <strong>Degustação:</strong>{' '}
+                        {Math.max(0, 1 - (quotaInfo.board_imports_used || 0))} de 1 importação gratuita de PDF/Foto disponível
+                      </span>
+                    ) : quotaInfo.plan_slug === 'essencial' ? (
+                      <span>
+                        📄 <strong>Plano Essencial:</strong>{' '}
+                        {Math.max(0, 2 - (quotaInfo.board_imports_used || 0))} de 2 importações no mês disponíveis
+                      </span>
+                    ) : (
+                      <span>
+                        ✨ <strong>{quotaInfo.plan_name || 'Pro IA'}:</strong> Importações ilimitadas de PDF/Word/Foto no Mural
+                      </span>
+                    )}
+                  </div>
+                  <span className="px-2 py-0.5 rounded-lg bg-white/90 border border-slate-200 text-[11px] font-extrabold text-slate-700">
+                    ⚡ {Math.max(0, (quotaInfo.credits_limit || 60) - (quotaInfo.credits_used || 0))}/{quotaInfo.credits_limit || 60} créditos (PDF = 5 créd.)
+                  </span>
+                </div>
+              )}
+
               {/* Área de Upload de Documento */}
               <div
                 onClick={() => fileInputRef.current?.click()}
@@ -380,9 +431,27 @@ export const BoardImportModal: React.FC<BoardImportModalProps> = ({
               )}
 
               {extractError && (
-                <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{extractError}</span>
+                <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{extractError}</span>
+                  </div>
+                  {onOpenUpgrade &&
+                    (extractError.toLowerCase().includes('upgrade') ||
+                      extractError.toLowerCase().includes('crédito') ||
+                      extractError.toLowerCase().includes('degustação') ||
+                      extractError.toLowerCase().includes('limite')) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetAndClose();
+                          onOpenUpgrade();
+                        }}
+                        className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
+                      >
+                        🚀 Fazer Upgrade de Plano para Importar Sem Limites
+                      </button>
+                    )}
                 </div>
               )}
             </>

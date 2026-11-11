@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Family, FamilyMember, MemberRole, Plan } from '../types';
 import { getFamilyInviteUrl } from '../lib/url';
-import { createSubscription, formatCentsToBRL } from '../lib/asaas';
+import {
+  createSubscription,
+  formatCentsToBRL,
+  formatCpfCnpjMask,
+  validateCpfCnpj
+} from '../lib/asaas';
 import { supabase } from '../lib/supabase';
-import { CreditCard, Users, ShieldCheck, CheckCircle2, Sparkles, QrCode, ArrowRight } from 'lucide-react';
+import { CreditCard, Users, ShieldCheck, CheckCircle2, Sparkles, QrCode, ArrowRight, Copy, Check } from 'lucide-react';
 import { MemberAvatar } from './MemberAvatar';
 import { AvatarPickerModal } from './AvatarPickerModal';
 
@@ -37,40 +42,58 @@ const DEFAULT_PLANS_FALLBACK: Plan[] = [
     id: 'd2222222-2222-2222-2222-222222222222',
     name: 'Família Essencial',
     slug: 'essencial',
-    price_cents: 2990,
+    price_cents: 5990,
     billing_interval: 'MONTHLY',
     max_members: 5,
-    has_ai_access: false,
-    features: ['Até 5 membros', 'Sincronização ilimitada', 'Painel de Resumo & Balanço', 'Lembretes'],
+    has_ai_access: true,
+    features: [
+      'Até 5 membros da família',
+      '60 créditos de IA por mês',
+      'Mural Escolar: até 2 importações de PDF/Foto por mês',
+      'Agenda Inteligente via Texto e Áudio',
+      'Painel de Resumo & Balanço da Semana'
+    ],
     is_active: true,
-    monthly_ai_credits: 0,
-    allowed_ai_modalities: [],
+    monthly_ai_credits: 60,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
   },
   {
     id: 'd3333333-3333-3333-3333-333333333333',
     name: 'Família Pro IA',
     slug: 'pro-ia',
-    price_cents: 4990,
+    price_cents: 8990,
     billing_interval: 'MONTHLY',
-    max_members: 10,
+    max_members: 8,
     has_ai_access: true,
-    features: ['Até 10 membros', 'Captura Inteligente Gemini IA', 'Briefing Matinal', 'Suporte VIP'],
+    features: [
+      'Até 8 membros da família',
+      '160 créditos de IA por mês (Multimodal Completo)',
+      'Mural Escolar: Importação ILIMITADA de PDFs, Word e Fotos',
+      'Aglutinação de Provas, Checklists e Trabalhos Embutidos',
+      'Armazenamento dos PDFs originais anexados aos cards'
+    ],
     is_active: true,
-    monthly_ai_credits: 100,
-    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
+    monthly_ai_credits: 160,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF', 'DOCX'],
   },
   {
     id: 'd4444444-4444-4444-4444-444444444444',
     name: 'Família Pro IA Anual',
     slug: 'pro-ia-anual',
-    price_cents: 47880,
+    price_cents: 87990,
     billing_interval: 'YEARLY',
     max_members: 10,
     has_ai_access: true,
-    features: ['2 meses grátis (economia R$ 120)', 'Acesso Completo IA', 'Membros ilimitados', 'Briefing e Resumo'],
+    features: [
+      'Economia de R$ 198,90 no ano (equivale a R$ 73,32/mês)',
+      'Até 10 membros da família',
+      'Dobro de IA: 320 créditos de IA todo mês',
+      'Cobertura completa para múltiplos filhos o ano letivo inteiro',
+      'Mural Escolar Ilimitado (PDFs, Word e Fotos) + Anexos'
+    ],
     is_active: true,
-    monthly_ai_credits: 150,
-    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF'],
+    monthly_ai_credits: 320,
+    allowed_ai_modalities: ['TEXT', 'AUDIO', 'IMAGE', 'PDF', 'DOCX'],
   },
 ];
 
@@ -117,10 +140,14 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   const [modalTab, setModalTab] = useState<'members' | 'billing'>('members');
 
   // Estado da Assinatura Asaas
+  const defaultAdmin = members.find((m) => m.role === 'ADMIN') || members[0];
   const [selectedPlanSlug, setSelectedPlanSlug] = useState<string>('pro-ia');
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'CREDIT_CARD'>('PIX');
+  const [holderName, setHolderName] = useState<string>(defaultAdmin?.name || family.name || '');
+  const [holderCpfCnpj, setHolderCpfCnpj] = useState<string>('');
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState<any | null>(null);
+  const [pixCopied, setPixCopied] = useState(false);
 
   // Lista dinâmica de planos vindos diretamente do banco de dados (public.plans)
   const [availablePlans, setAvailablePlans] = useState<Plan[]>(DEFAULT_PLANS_FALLBACK);
@@ -132,6 +159,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
           .from('plans')
           .select('*')
           .eq('is_active', true)
+          .gt('price_cents', 0)
           .order('price_cents', { ascending: true });
 
         if (!error && data && data.length > 0) {
@@ -139,7 +167,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
             data.map((p) => ({
               ...p,
               features: Array.isArray(p.features) ? p.features : [],
-              monthly_ai_credits: p.monthly_ai_credits ?? (p.has_ai_access ? 100 : 0),
+              monthly_ai_credits: p.monthly_ai_credits ?? (p.has_ai_access ? 160 : 0),
               allowed_ai_modalities: Array.isArray(p.allowed_ai_modalities)
                 ? p.allowed_ai_modalities
                 : (p.has_ai_access ? ['TEXT', 'AUDIO', 'IMAGE', 'PDF'] : []),
@@ -157,10 +185,27 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   }, [isOpen]);
 
   const handleSubscribeAsaas = async () => {
+    if (!validateCpfCnpj(holderCpfCnpj)) {
+      if (onToast) {
+        onToast('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido para emitir a cobrança no Asaas.', 'error');
+      }
+      return;
+    }
+
     const chosenPlan = availablePlans.find((p) => p.slug === selectedPlanSlug) || availablePlans[0];
     try {
       setIsSubscribing(true);
-      const res = await createSubscription(`cus_fam_${family.id.slice(0, 8)}`, chosenPlan, paymentMethod);
+      const res = await createSubscription(
+        `cus_fam_${family.id.slice(0, 8)}`,
+        chosenPlan,
+        paymentMethod,
+        {
+          familyId: family.id,
+          customerName: holderName.trim() || family.name,
+          customerEmail: defaultAdmin?.email || undefined,
+          cpfCnpj: holderCpfCnpj
+        }
+      );
       setSubscriptionSuccess(res);
       if (onToast) {
         onToast(`🎉 Assinatura do ${chosenPlan.name} gerada via Asaas (${paymentMethod})!`, 'success');
@@ -706,28 +751,77 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
             <div className="space-y-6">
               {/* Card de Status do Plano Atual */}
               <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 to-slate-900 text-white shadow-md space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-amber-400" />
                     <span className="text-xs font-black uppercase tracking-wider text-indigo-300">
                       Plano Atual da Família
                     </span>
                   </div>
-                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                    Degustação Ativa (Trial 14 Dias)
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                      family.plan_status === 'PAST_DUE'
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-400/30'
+                        : family.plan_status === 'TRIALING'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-400/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                    }`}
+                  >
+                    {family.plan_status === 'TRIALING'
+                      ? 'Degustação Ativa (14 Dias)'
+                      : family.plan_status === 'PAST_DUE'
+                      ? 'Pagamento Pendente'
+                      : 'Assinatura Ativa'}
                   </span>
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-black text-white">Família Pro IA</h3>
+                  <h3 className="text-xl font-black text-white">
+                    {family.plan_name || 'Família Pro IA'}
+                  </h3>
                   <p className="text-xs text-indigo-200 mt-0.5">
-                    Acesso completo a IA Gemini, sincronização ilimitada e até 10 membros familiares.
+                    Mural Escolar & Provas com IA, Agenda Inteligente e sincronização em tempo real.
                   </p>
                 </div>
 
+                {/* Barra de Consumo de Créditos IA da Família */}
+                {(() => {
+                  const used = Number(family.ai_credits_used || 0);
+                  const limit = Number(family.ai_credits_limit || 160);
+                  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+                  return (
+                    <div className="bg-slate-950/40 p-3 rounded-xl border border-indigo-800/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-indigo-200">
+                          ⚡ Consumo de Créditos IA no Ciclo
+                        </span>
+                        <span className="font-black text-amber-300">
+                          {used} / {limit} créditos ({pct}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            pct >= 90 ? 'bg-rose-500' : pct >= 75 ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-indigo-300">
+                        Pesos: Texto = 1 créd. • Voz = 2 créd. • Foto = 3 créd. • PDF/Word no Mural = 5 créd.
+                      </p>
+                    </div>
+                  );
+                })()}
+
                 <div className="pt-2 border-t border-indigo-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-300">
-                  <span>Renovação/Vencimento estimado: em 14 dias</span>
-                  <span className="font-semibold text-white">R$ 0,00 no período de testes</span>
+                  <span>
+                    Renovação/Vencimento: {family.plan_expires_at || 'em 14 dias'} (
+                    {family.plan_days_remaining ?? 14} dias restantes)
+                  </span>
+                  <span className="font-semibold text-white">
+                    {family.plan_status === 'TRIALING' ? 'Período de Avaliação' : 'Ciclo Vigente'}
+                  </span>
                 </div>
               </div>
 
@@ -839,12 +933,41 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                 </div>
               </div>
 
-              {/* Seletor de Forma de Pagamento */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              {/* Dados do Titular e Forma de Pagamento (Gateway Asaas) */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3.5">
                 <span className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Forma de Pagamento (Gateway Asaas)
+                  Dados para Emissão da Assinatura (Gateway Asaas)
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Nome Completo ou Razão Social *
+                    </label>
+                    <input
+                      type="text"
+                      value={holderName}
+                      onChange={(e) => setHolderName(e.target.value)}
+                      placeholder="Ex: Flávio Dias Santiago"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      CPF ou CNPJ do Titular * <span className="text-slate-400 font-normal">(Obrigatório Banco Central/Pix)</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={holderCpfCnpj}
+                      onChange={(e) => setHolderCpfCnpj(formatCpfCnpjMask(e.target.value))}
+                      placeholder="000.000.000-00"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('PIX')}
@@ -883,7 +1006,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                 {isSubscribing ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Conectando ao Asaas...</span>
+                    <span>Gerando cobrança segura no Asaas...</span>
                   </>
                 ) : (
                   <>
@@ -896,27 +1019,73 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
 
               {/* Feedback de Assinatura Gerada com Sucesso */}
               {subscriptionSuccess && (
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs space-y-2 animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2 font-bold text-emerald-900">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Assinatura Asaas Criada com Sucesso!</span>
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 font-extrabold text-emerald-900 text-sm">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Cobrança Asaas Gerada com Sucesso!</span>
+                    </div>
+                    <code className="font-mono text-[11px] bg-white px-2 py-0.5 rounded border border-emerald-200">
+                      ID: {subscriptionSuccess.id}
+                    </code>
                   </div>
-                  <p>
-                    Código da Assinatura: <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-200">{subscriptionSuccess.id}</code>
-                  </p>
-                  {subscriptionSuccess.paymentLink && (
-                    <a
-                      href={subscriptionSuccess.paymentLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 font-bold text-indigo-700 underline hover:text-indigo-900"
-                    >
-                      <span>Abrir Fatura / Link de Pagamento Asaas ↗</span>
-                    </a>
+
+                  {subscriptionSuccess.pixQrCodeImage && (
+                    <div className="flex flex-col items-center justify-center bg-white p-4 rounded-2xl border border-emerald-200 w-fit mx-auto">
+                      <img
+                        src={subscriptionSuccess.pixQrCodeImage}
+                        alt="QR Code Pix Asaas"
+                        className="w-44 h-44 object-contain"
+                      />
+                      <span className="text-[11px] font-bold text-slate-600 mt-1">
+                        Escaneie com o aplicativo do seu banco
+                      </span>
+                    </div>
                   )}
+
                   {subscriptionSuccess.pixQrCode && (
-                    <div className="p-2.5 bg-white rounded-xl border border-emerald-200 font-mono text-[11px] break-all">
-                      {subscriptionSuccess.pixQrCode}
+                    <div className="space-y-2">
+                      <span className="block text-[11px] font-bold text-emerald-900">
+                        Código Pix Copia e Cola:
+                      </span>
+                      <div className="p-2.5 bg-white rounded-xl border border-emerald-200 font-mono text-[11px] break-all select-all">
+                        {subscriptionSuccess.pixQrCode}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(subscriptionSuccess.pixQrCode);
+                          setPixCopied(true);
+                          if (onToast) onToast('Código Pix copiado para a área de transferência!', 'success');
+                          setTimeout(() => setPixCopied(false), 3000);
+                        }}
+                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        {pixCopied ? (
+                          <>
+                            <Check className="w-4 h-4" />
+                            <span>Código Pix Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4" />
+                            <span>Copiar Código Pix (Copia e Cola)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {subscriptionSuccess.paymentLink && (
+                    <div className="pt-1">
+                      <a
+                        href={subscriptionSuccess.paymentLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs inline-flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <span>Abrir Fatura Completa / Cartão no Asaas ↗</span>
+                      </a>
                     </div>
                   )}
                 </div>

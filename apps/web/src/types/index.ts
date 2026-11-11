@@ -1,17 +1,21 @@
 export type MemberRole = 'ADMIN' | 'MEMBER' | 'CHILD';
 export type EventStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
-export type SubscriptionStatus = 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELLED' | 'EXPIRED';
+export type SubscriptionStatus = 'ACTIVE' | 'TRIAL' | 'TRIALING' | 'PAST_DUE' | 'CANCELLED' | 'CANCELED' | 'EXPIRED';
+export type AiModality = 'TEXT' | 'AUDIO' | 'IMAGE' | 'PDF' | 'DOCX';
+export type AiUsageFeature = 'AGENDA_QUICK_ADD' | 'BOARD_IMPORT';
 
 export interface Family {
   id: string;
   name: string;
   timezone: string;
   plan_name?: string;
+  plan_slug?: string;
   plan_badge?: string;
   plan_status?: SubscriptionStatus;
   plan_expires_at?: string;
   plan_days_remaining?: number;
   ai_credits_limit?: number;
+  ai_credits_used?: number;
 }
 
 export interface FamilyMember {
@@ -105,10 +109,56 @@ export interface TenantBillingInfo {
   family_name: string;
   owner_email: string;
   plan_name: string;
+  plan_slug?: string;
   status: string;
   created_at: string;
   current_period_end: string;
   ai_credits_used?: number;
+  ai_credits_limit?: number;
+  monthly_ai_credits?: number;
+  total_tokens?: number;
+  total_tokens_used?: number;
+  prompt_tokens?: number;
+  prompt_tokens_total?: number;
+  completion_tokens?: number;
+  completion_tokens_total?: number;
+  pdf_imports_count?: number;
+  estimated_cost_usd?: number;
+}
+
+export interface AiUsageLogItem {
+  id: string;
+  family_id: string;
+  family_name?: string;
+  member_id?: string | null;
+  feature: AiUsageFeature;
+  modality: AiModality;
+  model_name?: string;
+  model_used?: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  credits_charged: number;
+  estimated_cost_usd: number;
+  items_generated: number;
+  status: 'SUCCESS' | 'ERROR' | 'BLOCKED_QUOTA';
+  error_message?: string | null;
+  created_at: string;
+}
+
+export interface AiQuotaCheckResult {
+  allowed: boolean;
+  reason?: string;
+  plan_slug?: string;
+  plan_name?: string;
+  required_credits?: number;
+  credits_cost?: number;
+  credits_used?: number;
+  credits_limit?: number;
+  credits_remaining?: number;
+  board_imports_used?: number;
+  board_imports_limit?: number | null;
+  message?: string;
 }
 
 export interface PlatformSettings {

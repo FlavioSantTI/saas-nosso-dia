@@ -580,6 +580,29 @@ export const App: React.FC = () => {
     }
   }, [showToast]);
 
+  // Atualiza em tempo real o contador de créditos IA da família após qualquer uso de IA
+  useEffect(() => {
+    const handleAiUsageUpdated = async () => {
+      const famId = familyRef.current?.id;
+      if (!famId) return;
+      try {
+        const { data: sub } = await supabase
+          .from('subscriptions')
+          .select('ai_credits_used')
+          .eq('family_id', famId)
+          .maybeSingle();
+        if (sub && typeof sub.ai_credits_used === 'number') {
+          setFamily((prev) => (prev ? { ...prev, ai_credits_used: sub.ai_credits_used } : prev));
+        }
+      } catch {
+        // Silencioso
+      }
+    };
+
+    window.addEventListener('nosso-dia-ai-usage-updated', handleAiUsageUpdated);
+    return () => window.removeEventListener('nosso-dia-ai-usage-updated', handleAiUsageUpdated);
+  }, []);
+
   // Navegação Temporal
   const handlePrevDate = () => {
     setCurrentDate((prev) => {
@@ -715,6 +738,7 @@ export const App: React.FC = () => {
             ai_credits_used,
             plans (
               id,
+              slug,
               name,
               monthly_ai_credits
             )
@@ -736,11 +760,13 @@ export const App: React.FC = () => {
         let enrichedFamily: Family = {
           ...rawFamily,
           plan_name: 'Família Pro IA Anual',
+          plan_slug: 'pro-ia-anual',
           plan_badge: 'Pro IA',
           plan_status: 'ACTIVE',
           plan_expires_at: '15/10/2027',
           plan_days_remaining: 365,
-          ai_credits_limit: 250
+          ai_credits_limit: 320,
+          ai_credits_used: 0
         };
 
         const subData = subResult.data;
@@ -756,11 +782,13 @@ export const App: React.FC = () => {
           enrichedFamily = {
             ...enrichedFamily,
             plan_name: planName,
+            plan_slug: planObj?.slug || (planName.includes('Anual') ? 'pro-ia-anual' : planName.includes('Pro') ? 'pro-ia' : planName.includes('Essencial') ? 'essencial' : 'trial'),
             plan_badge: planName.includes('Pro') ? 'Pro IA' : (planName.includes('Essencial') ? 'Essencial' : 'Degustação'),
             plan_status: subData.status,
             plan_expires_at: formattedExp,
             plan_days_remaining: daysRem,
-            ai_credits_limit: planObj?.monthly_ai_credits || 250
+            ai_credits_limit: planObj?.monthly_ai_credits || 320,
+            ai_credits_used: Number(subData.ai_credits_used || 0)
           };
         }
 
@@ -2187,6 +2215,10 @@ export const App: React.FC = () => {
         members={members}
         currentMember={currentMember}
         existingItems={boardItems}
+        onOpenUpgrade={() => {
+          setIsBoardImportModalOpen(false);
+          setIsManageFamilyOpen(true);
+        }}
         onBatchSave={handleBatchSaveBoardItems}
       />
 

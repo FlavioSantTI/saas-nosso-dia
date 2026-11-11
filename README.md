@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v3.0.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v3.1.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -48,6 +48,17 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
   - A IA extrai todas as datas de provas de uma só vez, mantém matérias do mesmo dia aglutinadas conforme o comunicado, converte cada capítulo em um checklist interativo de estudo e separa automaticamente os **trabalhos embutidos na composição da nota** como cards de entrega (`ASSIGNMENT`).
 - **Anexo do Comunicado Original (`📎 Ver original`):** O documento original fica salvo no Supabase Storage (`board-attachments`) e vinculado a todos os cards gerados para visualização imediata em modal (PDF, Imagem ou texto extraído).
 - **Widget "🎯 No Radar do Mural" em Meu Dia:** Exibe automaticamente provas e entregas dos próximos 3 dias diretamente no resumo matinal da família.
+
+### 💳 0.1. Cobrança Recorrente via Asaas & Auditoria Real de Tokens IA (Novo na v3.1!)
+- **Medição Exata de Tokens do Google Gemini (`usageMetadata`):** Cada chamada de IA captura `promptTokenCount`, `candidatesTokenCount` e `totalTokenCount`, calcula o custo real em dólar (`US$ 0.15/1M` input e `US$ 0.60/1M` output) e registra na tabela `public.ai_usage_logs` com isolamento `LGPD Guard`.
+- **Tarifação Ponderada & Regra de Degustação:**
+  - Pesos de créditos: `TEXT = 1`, `AUDIO = 2`, `IMAGE = 3` e `PDF / DOCX = 5`.
+  - **Degustação (`trial`):** 15 créditos/mês + **1 importação gratuita de PDF/Foto no Mural**.
+  - **Família Essencial (`R$ 59,90/mês`):** 60 créditos/mês + até 2 importações no Mural/mês.
+  - **Família Pro IA (`R$ 89,90/mês`):** 160 créditos/mês + importações ilimitadas no Mural.
+  - **Família Pro IA Anual (`R$ 879,90/ano`):** 320 créditos/mês + importações ilimitadas no Mural.
+- **Painel de Auditoria de Tokens no Super-Admin (`/admin`):** 4 KPIs executivos de tokens/custos reais em `R$` e `US$`, ranking de consumo por conta (família) e extrato em tempo real das últimas chamadas.
+- **Integração Completa de Cobrança via Asaas:** Cofre AES-256 para `asaas_api_key`, `asaas_environment` e `asaas_webhook_secret`, Edge Functions (`asaas-checkout` e `asaas-webhook`), validação de CPF/CNPJ e checkout com QR Code Pix e Copia e Cola.
 
 ### 🔍 1. Busca Rápida de Atividades & Aniversários Familiares
 - **Busca por Palavra-Chave:** Encontre qualquer compromisso ou rotina digitando termos diretos (ex.: `unimed`, `voleibol`, `aniversario`, `terapia`).
@@ -219,6 +230,26 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v3.1.0] — 2026-11-11
+#### 💳 Integração Completa de Cobrança via Asaas, Medição Exata de Tokens por Conta & Painel de Auditoria Global de IA
+- **Medição Exata de Tokens e Controle de Cotas por Conta (`20261111000001_ai_audit_and_asaas_billing.sql`, `gemini.ts`):**
+  - Nova tabela `public.ai_usage_logs` com Row Level Security (`LGPD Guard`) registrando `prompt_tokens`, `completion_tokens`, `total_tokens`, `credits_charged`, `estimated_cost_usd`, `feature` (`AGENDA_QUICK_ADD` | `BOARD_IMPORT`), `modality` (`TEXT` | `AUDIO` | `IMAGE` | `PDF` | `DOCX`), `items_generated` e `status` (`SUCCESS` | `BLOCKED_QUOTA` | `ERROR`).
+  - Novas RPCs PostgreSQL atômicas `verify_ai_quota_before_call` e `record_ai_usage` garantindo validação prévia de saldo e débito automático em `public.subscriptions.ai_credits_used`.
+  - **Regra Comercial de Degustação e Planos v3:**
+    - **Degustação (`trial` — R$ 0):** 15 créditos + **1 importação gratuita de PDF/Foto no Mural Escolar**.
+    - **Família Essencial (`essencial` — R$ 59,90/mês):** 60 créditos/mês + até 2 importações documentais no Mural por mês.
+    - **Família Pro IA (`pro-ia` — R$ 89,90/mês):** 160 créditos/mês + importações ilimitadas no Mural.
+    - **Família Pro IA Anual (`pro-ia-anual` — R$ 879,90/ano):** 320 créditos/mês + importações ilimitadas no Mural.
+  - Exibição de saldo de créditos em tempo real e faixa de degustação nos modais `QuickAddWithAI.tsx`, `BoardImportModal.tsx` e `FamilyManageModal.tsx`.
+- **Painel de Auditoria de Tokens e Custos Reais no Super-Admin (`AdminDashboard.tsx`):**
+  - **4 Cards Executivos:** Total de Créditos Usados, Total de Tokens Reais Processados (`Input` + `Output`), Custo Real Google Cloud em `R$` e `US$` e divisão por funcionalidade (`Mural` vs `Agenda`).
+  - **Ranking de Consumo por Conta (Família):** Tabela comparativa por tenant exibindo plano, barra de progresso de créditos, quantidade de PDFs importados no Mural, tokens reais acumulados e custo em `R$`.
+  - **Extrato de Requisições em Tempo Real:** Tabela auditável com as últimas chamadas ao Google Gemini (`usageMetadata`).
+- **Integração de Cobrança Recorrente via Asaas (`asaas.ts`, `asaas-checkout`, `asaas-webhook`, `FamilyManageModal.tsx`):**
+  - **Cofre AES-256 para o Asaas:** Armazenamento criptografado no banco para `asaas_api_key` (`$aact_...`), `asaas_environment` (`sandbox` | `production`) e `asaas_webhook_secret`.
+  - **Supabase Edge Functions:** `supabase/functions/asaas-checkout/index.ts` (criação de cliente com CPF/CNPJ, assinatura recorrente Pix/Cartão e extração do QR Code Pix) e `supabase/functions/asaas-webhook/index.ts` (ativação automática em `PAYMENT_CONFIRMED`/`PAYMENT_RECEIVED` e renovação da franquia mensal de créditos `ai_credits_used = 0`).
+  - **Checkout Transparente:** Máscara e validação de CPF/CNPJ do titular, exibição visual do QR Code Pix, botão *"Copiar Código Pix (Copia e Cola)"* e link direto da fatura Asaas.
 
 ### [v3.0.0] — 2026-11-08
 #### 📌 Marco 3.0: Mural da Família & Escola, Importação Documental em Lote com IA e Anexo Original
