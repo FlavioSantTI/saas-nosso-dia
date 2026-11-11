@@ -8,7 +8,7 @@ import {
   validateCpfCnpj
 } from '../lib/asaas';
 import { supabase } from '../lib/supabase';
-import { CreditCard, Users, ShieldCheck, CheckCircle2, Sparkles, QrCode, ArrowRight, Copy, Check } from 'lucide-react';
+import { CreditCard, Users, ShieldCheck, CheckCircle2, Sparkles, QrCode, ArrowRight, Copy, Check, AlertTriangle } from 'lucide-react';
 import { MemberAvatar } from './MemberAvatar';
 import { AvatarPickerModal } from './AvatarPickerModal';
 
@@ -145,6 +145,7 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'CREDIT_CARD'>('PIX');
   const [holderName, setHolderName] = useState<string>(defaultAdmin?.name || family.name || '');
   const [holderCpfCnpj, setHolderCpfCnpj] = useState<string>('');
+  const [billingError, setBillingError] = useState<string | null>(null);
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [subscriptionSuccess, setSubscriptionSuccess] = useState<any | null>(null);
   const [pixCopied, setPixCopied] = useState(false);
@@ -185,9 +186,12 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
   }, [isOpen]);
 
   const handleSubscribeAsaas = async () => {
+    setBillingError(null);
     if (!validateCpfCnpj(holderCpfCnpj)) {
+      const msg = 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido para emitir a cobrança no Asaas.';
+      setBillingError(msg);
       if (onToast) {
-        onToast('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido para emitir a cobrança no Asaas.', 'error');
+        onToast(msg, 'error');
       }
       return;
     }
@@ -212,8 +216,10 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
       }
     } catch (err: any) {
       console.error(err);
+      const errMsg = `Erro ao gerar assinatura Asaas: ${err.message}`;
+      setBillingError(errMsg);
       if (onToast) {
-        onToast(`Erro ao gerar assinatura Asaas: ${err.message}`, 'error');
+        onToast(errMsg, 'error');
       }
     } finally {
       setIsSubscribing(false);
@@ -960,12 +966,26 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                       type="text"
                       inputMode="numeric"
                       value={holderCpfCnpj}
-                      onChange={(e) => setHolderCpfCnpj(formatCpfCnpjMask(e.target.value))}
+                      onChange={(e) => {
+                        setHolderCpfCnpj(formatCpfCnpjMask(e.target.value));
+                        if (billingError) setBillingError(null);
+                      }}
                       placeholder="000.000.000-00"
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className={`w-full px-3 py-2.5 rounded-xl border bg-white text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 ${
+                        billingError
+                          ? 'border-rose-400 ring-2 ring-rose-500/20 focus:ring-rose-500'
+                          : 'border-slate-200 focus:ring-indigo-500'
+                      }`}
                     />
                   </div>
                 </div>
+
+                {billingError && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-150">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{billingError}</span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                   <button

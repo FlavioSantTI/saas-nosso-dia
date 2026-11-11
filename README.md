@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v3.1.0-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v3.1.1-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -230,6 +230,13 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v3.1.1] — 2026-11-11
+#### 🐛 Correção de Sobreposição (`z-index`) de Notificações Toast e Validação Inline no Checkout Asaas
+- **Elevação de Camada do Toast Global (`Toast.tsx`):**
+  - Alteração do container flutuante de `z-50` para `z-[110]`, garantindo que avisos de erro, sucesso e validação apareçam sempre à frente de qualquer modal aberto na aplicação.
+- **Feedback Visual Inline no Checkout Asaas (`FamilyManageModal.tsx`):**
+  - Adicionado alerta de erro inline diretamente abaixo do campo **CPF ou CNPJ do Titular** e realce visual de borda (`border-rose-400 ring-rose-500/20`) quando o documento é omitido ou inválido, limpando automaticamente ao digitar.
 
 ### [v3.1.0] — 2026-11-11
 #### 💳 Integração Completa de Cobrança via Asaas, Medição Exata de Tokens por Conta & Painel de Auditoria Global de IA
