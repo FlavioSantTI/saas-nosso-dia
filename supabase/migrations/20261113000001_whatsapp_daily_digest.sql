@@ -235,8 +235,7 @@ BEGIN
                     '🌿 Nenhum compromisso na agenda hoje. Dia livre para relaxar!')
         || COALESCE(E'\n\n🎯 *No Radar do Mural (Provas & Entregas)*\n' || v_radar, '')
         || CASE WHEN v_agenda LIKE '%⭐%' THEN E'\n\n_⭐ = você é o responsável_' ELSE '' END
-        || E'\n\n🔗 ' || p_app_url
-        || E'\n_Responda SAIR para não receber mais._';
+        || E'\n\n_Responda SAIR para não receber mais._';
 END;
 $$;
 
