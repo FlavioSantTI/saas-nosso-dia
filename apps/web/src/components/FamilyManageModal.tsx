@@ -469,6 +469,8 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                   (current.nickname || '') !== (m.nickname || '') ||
                   (current.avatar || '') !== (m.avatar || '') ||
                   (current.email || '') !== (m.email || '') ||
+                  (current.whatsapp_phone || '') !== (m.whatsapp_phone || '') ||
+                  Boolean(current.whatsapp_opt_in) !== Boolean(m.whatsapp_opt_in) ||
                   current.role !== m.role ||
                   current.color !== m.color;
 
@@ -636,6 +638,38 @@ export const FamilyManageModal: React.FC<FamilyManageModalProps> = ({
                         )}
                       </div>
                     </div>
+
+                    {/* Campo WhatsApp e Consentimento do Resumo Diário (Adultos) */}
+                    {current.role !== 'CHILD' && (
+                      <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+                          <label htmlFor={`member-whatsapp-${m.id}`} className="text-[11px] font-semibold text-slate-600 leading-snug">
+                            WhatsApp (para resumo diário matinal às 06:00):
+                          </label>
+                          <input
+                            id={`member-whatsapp-${m.id}`}
+                            type="tel"
+                            value={current.whatsapp_phone || ''}
+                            onChange={(e) => handleMemberFieldChange(m.id, 'whatsapp_phone', e.target.value)}
+                            placeholder="(63) 99999-8888 ou 5563999998888"
+                            className="w-full sm:flex-1 min-w-0 text-base sm:text-xs px-3 py-2 sm:py-1.5 bg-slate-50/70 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                          />
+                        </div>
+
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] text-slate-700 font-medium pl-0.5">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(current.whatsapp_opt_in)}
+                            onChange={(e) => handleMemberFieldChange(m.id, 'whatsapp_opt_in', e.target.checked)}
+                            disabled={!current.whatsapp_phone?.trim()}
+                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer disabled:opacity-40"
+                          />
+                          <span>
+                            Aceito receber o resumo diário da família via WhatsApp às 06:00 (responda SAIR para desativar)
+                          </span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 );
               })}

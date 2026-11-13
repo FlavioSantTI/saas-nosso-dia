@@ -29,6 +29,10 @@ export interface FamilyMember {
   role: MemberRole;
   color: string;
   birth_date?: string | null;
+  whatsapp_phone?: string | null;
+  whatsapp_opt_in?: boolean;
+  whatsapp_opt_in_at?: string | null;
+  digest_hour?: number;
 }
 
 export interface Location {

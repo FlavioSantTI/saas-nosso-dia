@@ -3,7 +3,7 @@
 <div align="center">
 
 ![Nosso Dia Logo](https://img.shields.io/badge/Nosso_Dia-Coordenação_Familiar-0284C7?style=for-the-badge&logo=google-calendar&logoColor=white)
-![Versão](https://img.shields.io/badge/Versão-v3.1.3-059669?style=for-the-badge)
+![Versão](https://img.shields.io/badge/Versão-v3.2.0-059669?style=for-the-badge)
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -59,6 +59,12 @@ O **Nosso Dia** não é uma simples lista de tarefas e nem um calendário corpor
   - **Família Pro IA Anual (`R$ 879,90/ano`):** 320 créditos/mês + importações ilimitadas no Mural.
 - **Painel de Auditoria de Tokens no Super-Admin (`/admin`):** 4 KPIs executivos de tokens/custos reais em `R$` e `US$`, ranking de consumo por conta (família) e extrato em tempo real das últimas chamadas.
 - **Integração Completa de Cobrança via Asaas:** Cofre AES-256 para `asaas_api_key`, `asaas_environment` e `asaas_webhook_secret`, Edge Functions (`asaas-checkout` e `asaas-webhook`), validação de CPF/CNPJ e checkout com QR Code Pix e Copia e Cola.
+
+### 📱 0.2. Resumo Diário Automático via WhatsApp (WAHA + n8n) (Novo na v3.2!)
+- **Briefing Matinal às 06:00 Personalizado:** Envio pontual diário para adultos cadastrados com opt-in ativo contendo a **Agenda de Hoje** (eventos + rotinas recorrentes), indicação com estrela ⭐ para o responsável e **Radar do Mural** (provas e entregas escolares dos próximos 7 dias com checklist e nota).
+- **Integração com API WhatsApp (WAHA):** Validação de número ativo (`check-exists`), envio via sessão dedicada e controle de atraso anti-bloqueio (*anti-ban delay* entre 10 e 25 segundos).
+- **Descadastro Automático por Palavra-Chave (LGPD):** Webhook integrado no n8n que processa respostas do tipo `SAIR`, `CANCELAR` ou `PARAR`, desativa o opt-in no banco de dados e envia confirmação amigável de cancelamento.
+- **Tabela de Auditoria e Trava Anti-Duplicidade (`public.whatsapp_digest_logs`):** Restrição única por membro e data, permitindo reexecuções seguras sem duplicar envios para o cliente.
 
 ### 🔍 1. Busca Rápida de Atividades & Aniversários Familiares
 - **Busca por Palavra-Chave:** Encontre qualquer compromisso ou rotina digitando termos diretos (ex.: `unimed`, `voleibol`, `aniversario`, `terapia`).
@@ -230,6 +236,16 @@ Execute a migração inicial localizada em `supabase/migrations/20261007000001_i
 ## 📜 Controle de Versão (Changelog)
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e aderente ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+
+### [v3.2.0] — 2026-11-13
+#### 📱 Resumo Diário Matinal via WhatsApp (WAHA + n8n) & Gestão de Opt-in LGPD
+- **Disparo Diário de Resumos às 06:00 via n8n e WAHA (`n8n_waha_whatsapp_digest.json`):**
+  - Integração do n8n com a API do WAHA (`/api/contacts/check-exists` e `/api/sendText`) com suporte a pausas aleatórias anti-ban (10-25s) e registros de auditoria em `public.whatsapp_digest_logs`.
+  - RPCs atômicas no PostgreSQL: `claim_whatsapp_daily_digests` (busca de membros devidos por timezone), `log_whatsapp_digest` (registro de status `SENT`, `FAILED` ou `SKIPPED`) e `build_whatsapp_mural_radar_text` (visão dedicada das provas e entregas escolares dos próximos 7 dias).
+  - Webhook de cancelamento imediato (`n8n_waha_opt_out_webhook.json`) respondendo a palavras-chave (`SAIR`, `CANCELAR`) e atualizando `whatsapp_opt_in = false`.
+- **Campos de WhatsApp e Consentimento no Frontend (`FamilyManageModal.tsx`, `App.tsx`):**
+  - Adicionado input de WhatsApp e checkbox com termo de consentimento explícito para membros adultos (`ADMIN` e `MEMBER`).
+  - Persistência e normalização de telefone padrão Brasil (`55 + DDD + Número`) via trigger `normalize_family_member_whatsapp`.
 
 ### [v3.1.3] — 2026-11-11
 #### 🔑 Correção de HTTP 401 no Proxy Nginx Asaas (`underscores_in_headers` & `X-Asaas-Access-Token`)

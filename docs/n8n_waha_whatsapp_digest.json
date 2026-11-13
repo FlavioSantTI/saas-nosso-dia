@@ -1,0 +1,371 @@
+{
+  "name": "Nosso Dia - Resumo Matinal WhatsApp (WAHA)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-cron-6h",
+      "name": "Disparo Diário (06:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://cfzdxgpoltfwrzdzqfdv.supabase.co/rest/v1/rpc/claim_whatsapp_daily_digests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "SUA_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer SUA_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "p_limit",
+              "value": 200
+            },
+            {
+              "name": "p_window_hours",
+              "value": 3
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase-claim-digests",
+      "name": "Supabase: Buscar Resumos do Dia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop-over-items",
+      "name": "Loop por Membro",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://waha.app-bertuol.tech/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "session",
+              "value": "Atendimento"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "SUA_WAHA_API_KEY"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "waha-check-exists",
+      "name": "WAHA: Checar se Número Existe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.numberExists }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-number-exists",
+      "name": "Número Válido no WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://waha.app-bertuol.tech/api/sendText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "SUA_WAHA_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"session\": \"Atendimento\",\n  \"chatId\": \"{{ $json.chatId || $('Loop por Membro').item.json.phone + '@c.us' }}\",\n  \"text\": {{ JSON.stringify($('Loop por Membro').item.json.message_text) }}\n}",
+        "options": {}
+      },
+      "id": "waha-send-text",
+      "name": "WAHA: Enviar Resumo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 220]
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.floor(Math.random() * 15) + 10 }}",
+        "unit": "seconds"
+      },
+      "id": "wait-antiban",
+      "name": "Pausa Anti-Ban (10-25s)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1520, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://cfzdxgpoltfwrzdzqfdv.supabase.co/rest/v1/rpc/log_whatsapp_digest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "SUA_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer SUA_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "p_log_id",
+              "value": "={{ $('Loop por Membro').item.json.log_id }}"
+            },
+            {
+              "name": "p_status",
+              "value": "SENT"
+            },
+            {
+              "name": "p_waha_message_id",
+              "value": "={{ $json.id || null }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase-log-success",
+      "name": "Supabase: Log Sucesso (SENT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://cfzdxgpoltfwrzdzqfdv.supabase.co/rest/v1/rpc/log_whatsapp_digest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "SUA_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer SUA_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "p_log_id",
+              "value": "={{ $('Loop por Membro').item.json.log_id }}"
+            },
+            {
+              "name": "p_status",
+              "value": "SKIPPED"
+            },
+            {
+              "name": "p_error",
+              "value": "Telefone não registrado no WhatsApp (numberExists: false)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase-log-skipped",
+      "name": "Supabase: Log Sem WhatsApp (SKIPPED)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 420]
+    }
+  ],
+  "connections": {
+    "Disparo Diário (06:00)": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Buscar Resumos do Dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Buscar Resumos do Dia": {
+      "main": [
+        [
+          {
+            "node": "Loop por Membro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop por Membro": {
+      "main": [
+        [
+          {
+            "node": "WAHA: Checar se Número Existe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA: Checar se Número Existe": {
+      "main": [
+        [
+          {
+            "node": "Número Válido no WhatsApp?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Número Válido no WhatsApp?": {
+      "main": [
+        [
+          {
+            "node": "WAHA: Enviar Resumo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Supabase: Log Sem WhatsApp (SKIPPED)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA: Enviar Resumo": {
+      "main": [
+        [
+          {
+            "node": "Pausa Anti-Ban (10-25s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pausa Anti-Ban (10-25s)": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Log Sucesso (SENT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Log Sucesso (SENT)": {
+      "main": [
+        [
+          {
+            "node": "Loop por Membro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Log Sem WhatsApp (SKIPPED)": {
+      "main": [
+        [
+          {
+            "node": "Loop por Membro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

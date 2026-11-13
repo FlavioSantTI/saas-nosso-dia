@@ -1,0 +1,145 @@
+{
+  "name": "Nosso Dia - WhatsApp Opt-Out (Resposta SAIR via WAHA)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "waha-webhook-optout",
+        "options": {}
+      },
+      "id": "webhook-waha",
+      "name": "Webhook do WAHA",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.body?.payload?.fromMe }}",
+              "value2": false
+            }
+          ],
+          "string": [
+            {
+              "value1": "={{ ($json.body?.payload?.body || '').trim().toUpperCase() }}",
+              "operation": "regex",
+              "value2": "^(SAIR|CANCELAR|PARAR|STOP)$"
+            }
+          ]
+        }
+      },
+      "id": "if-is-sair",
+      "name": "Mensagem é 'SAIR'?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://cfzdxgpoltfwrzdzqfdv.supabase.co/rest/v1/rpc/whatsapp_opt_out_by_phone",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "SUA_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer SUA_SUPABASE_SERVICE_ROLE_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "p_phone",
+              "value": "={{ $('Webhook do WAHA').item.json.body?.payload?.from }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase-opt-out",
+      "name": "Supabase: Desativar Opt-in",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://waha.app-bertuol.tech/api/sendText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "SUA_WAHA_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"session\": \"Atendimento\",\n  \"chatId\": \"{{ $('Webhook do WAHA').item.json.body?.payload?.from }}\",\n  \"text\": \"✅ Você foi descadastrado com sucesso do resumo diário do Nosso Dia.\\n\\nCaso queira voltar a receber no futuro, você pode reativar a qualquer momento no menu Gestão da Família dentro do aplicativo.\"\n}",
+        "options": {}
+      },
+      "id": "waha-reply-confirmation",
+      "name": "WAHA: Confirmar Descadastro",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 260]
+    }
+  ],
+  "connections": {
+    "Webhook do WAHA": {
+      "main": [
+        [
+          {
+            "node": "Mensagem é 'SAIR'?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem é 'SAIR'?": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Desativar Opt-in",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Desativar Opt-in": {
+      "main": [
+        [
+          {
+            "node": "WAHA: Confirmar Descadastro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

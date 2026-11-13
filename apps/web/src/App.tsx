@@ -1219,7 +1219,10 @@ export const App: React.FC = () => {
       avatar: updatedMember.avatar || null,
       email: updatedMember.email?.trim() || null,
       role: updatedMember.role,
-      color: updatedMember.color
+      color: updatedMember.color,
+      whatsapp_phone: updatedMember.whatsapp_phone?.trim() || null,
+      whatsapp_opt_in: updatedMember.whatsapp_opt_in ?? false,
+      digest_hour: updatedMember.digest_hour ?? 6
     };
 
     let { error } = await supabase
@@ -1227,9 +1230,9 @@ export const App: React.FC = () => {
       .update(payload)
       .eq('id', updatedMember.id);
 
-    // Fallback gracioso se a coluna avatar não existir no schema do banco
-    if (error && String(error.message).includes('avatar')) {
-      const { avatar, ...fallbackPayload } = payload;
+    // Fallback gracioso se colunas novas (avatar ou whatsapp_*) ainda não existirem no schema
+    if (error && (String(error.message).includes('avatar') || String(error.message).includes('whatsapp_'))) {
+      const { avatar, whatsapp_phone, whatsapp_opt_in, digest_hour, ...fallbackPayload } = payload;
       const { error: fbError } = await supabase
         .from('family_members')
         .update(fallbackPayload)
